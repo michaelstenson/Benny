@@ -1,0 +1,6 @@
+PORT=3000
+
+SUPABASE_URL=https://kchjqzmvttoyjjofnbiu.supabase.co
+SUPABASE_ANON_KEY=sb_publishable_GMIU58aUdt8la9cf1_btEw_JFgQwxRf
+
+ANTHROPIC_API_KEY=
