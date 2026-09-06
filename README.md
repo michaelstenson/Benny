@@ -23,12 +23,23 @@ benny/
 ├── server/
 │   ├── index.js           # Express app entry point — start here
 │   ├── lib/
-│   │   └── supabaseClient.js   # one shared Supabase client
+│   │   ├── supabaseClient.js   # two Supabase clients: anon (RLS-limited) and admin (service_role)
+│   │   ├── googleClient.js     # builds the Google OAuth2 client
+│   │   ├── tokenStore.js       # reads/writes your Google tokens in Supabase
+│   │   ├── anthropicClient.js  # one shared Claude client
+│   │   └── choreParser.js      # turns free text into {title, assignee, due_date} via Claude tool use
 │   └── routes/
-│       └── hello.js       # GET /api/hello — the hello-world endpoint
+│       ├── hello.js       # GET /api/hello — the hello-world endpoint
+│       ├── auth.js        # /auth/google + /auth/google/callback — the Google sign-in handshake
+│       ├── calendar.js    # /api/calendar/status + /api/calendar/events
+│       └── chores.js      # /api/chores (GET/POST) + /api/chores/:id (PATCH)
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
-│   └── app.js             # browser-side JS that calls /api/hello
+│   ├── app.js              # browser-side JS that calls /api/hello
+│   ├── calendar.html       # the calendar page
+│   ├── calendar.js         # browser-side JS that calls /api/calendar/events
+│   ├── chores.html         # the chores page
+│   └── chores.js           # browser-side JS for adding/listing/completing chores
 ├── .env.example            # template for required environment variables
 ├── .env                     # your real values (never committed — see .gitignore)
 └── package.json
@@ -67,6 +78,70 @@ Once you can load the page and see "✅ Supabase is connected", every piece
 of the stack is proven end to end and we're ready to build real features
 on top of it — starting with the shared calendar.
 
+## Stage 2: Google Calendar
+
+This adds a "Connect Google Calendar" flow and a `/calendar.html` page that
+lists your upcoming events. Two setup steps are required beyond `.env.example`
+that only you can do (they involve logging into your own accounts):
+
+1. **Google OAuth credentials** — from a project in
+   [console.cloud.google.com](https://console.cloud.google.com) with the
+   Calendar API enabled. Add to `.env`:
+   ```
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
+   GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
+   ```
+2. **Supabase service_role key** — from your Supabase project's
+   **Settings → API** page (it's below the anon/publishable key, labeled
+   `service_role` — click "reveal"). Add to `.env`:
+   ```
+   SUPABASE_SERVICE_ROLE_KEY=...
+   ```
+   This key bypasses Row Level Security entirely, which is exactly why the
+   `google_tokens` table (holding your OAuth tokens) has RLS turned on with
+   no public policies — the regular anon key literally cannot read or write
+   it. Only trusted server code (this app, never a browser) should ever
+   hold this key.
+
+Once both are in `.env`, restart the server (`npm run dev` picks up new
+env vars on restart, not automatically), open http://localhost:3000/calendar.html,
+and click **Connect Google Calendar**. You'll go through Google's real
+consent screen, then land back on the calendar page showing your upcoming
+events.
+
+## Stage 3: Natural-language chores
+
+Adds a `/chores.html` page: type something like "remind Mer to water the
+plants Thursday", and Benny turns it into a real chore with a title,
+an assignee, and a due date — this is the first feature where the app
+itself calls Claude, not just Supabase or Google.
+
+**How it works:** `server/lib/choreParser.js` sends your sentence to Claude
+using a feature called *tool use* (function calling). Instead of asking
+Claude to reply with some JSON and hoping it's formatted correctly, we hand
+it a strict schema — `{ title, assignee, due_date }`, with `assignee`
+restricted to exactly `"michael"` or `"mer"` — and Claude is forced to fill
+in those exact fields. We also tell it today's date in the prompt, so it
+can resolve "Thursday" or "tomorrow" into a real calendar date.
+
+**Setup:** add your Anthropic API key to `.env`:
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+Get one from [console.anthropic.com](https://console.anthropic.com) →
+**API Keys** → **Create Key**. Note this is a *separate* account/product
+from your regular Claude.ai chat login — the API bills per use (pay-as-you-go),
+not through a Claude subscription. You'll likely need to add a small amount
+of credit/billing there before requests succeed.
+
+A design choice worth noting: unlike `google_tokens`, the `chores` table
+does **not** have Row Level Security enabled. It doesn't hold credentials —
+just household task text — and only our own server ever touches it, so the
+extra lockdown wasn't worth the complexity here. `google_tokens` earns RLS
+because a leaked OAuth token is a real problem; a leaked "water the plants"
+is not.
+
 ## Putting this on GitHub
 
 This folder is not yet a git repository — that's your first set of git reps.
@@ -97,8 +172,8 @@ private) GitHub repo.
 ## Roadmap (in order)
 
 1. ✅ Hello world — full stack wired together
-2. Shared calendar that auto-populates from email
-3. Natural-language chore list
+2. ✅ Shared calendar that auto-populates from email (Google Calendar connected; Mer's account and richer views come later)
+3. ⏳ Natural-language chore list (code delivered; needs your Anthropic API key to test live)
 4. Mutual to-do assignment
 5. Home energy/bills analyzer
 6. Pet vet visit / treatment / food scheduling
