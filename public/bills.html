@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Benny — Bills</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+  <main class="max-w-lg w-full bg-white rounded-2xl shadow-md p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-semibold text-slate-800">🐧 Bills</h1>
+      <a href="/" class="text-sm text-slate-400 hover:text-slate-600">← home</a>
+    </div>
+
+    <form id="add-form" class="flex gap-2 mb-2">
+      <input
+        id="bill-input"
+        type="text"
+        placeholder="e.g. electric bill was $142.50 for August"
+        class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+        autocomplete="off"
+      />
+      <button
+        type="submit"
+        class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm hover:bg-slate-700 transition disabled:opacity-50"
+      >
+        Add
+      </button>
+    </form>
+    <p id="add-status" class="text-xs text-slate-400 h-4 mb-4"></p>
+
+    <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">By category</h2>
+    <ul id="summary" class="mb-6"></ul>
+
+    <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">History</h2>
+    <ul id="history" class="divide-y divide-slate-100"></ul>
+  </main>
+
+  <script src="/bills.js"></script>
+</body>
+</html>

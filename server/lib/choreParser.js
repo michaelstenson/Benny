@@ -4,7 +4,7 @@
 // to write JSON in a text reply and hoping it's well-formed, we give it a
 // strict schema and it fills in the fields, guaranteed to match.
 
-import { anthropic, CHORE_PARSING_MODEL } from './anthropicClient.js';
+import { anthropic, FAST_EXTRACTION_MODEL } from './anthropicClient.js';
 
 // This is the schema Claude has to fill in. Giving it exactly two allowed
 // assignee values (rather than accepting free text) is what makes this
@@ -44,7 +44,7 @@ export async function parseChoreText(text) {
   const weekday = today.toLocaleDateString('en-US', { weekday: 'long' });
 
   const response = await anthropic.messages.create({
-    model: CHORE_PARSING_MODEL,
+    model: FAST_EXTRACTION_MODEL,
     max_tokens: 300,
     system:
       `Today is ${weekday}, ${isoToday}. Use this to resolve relative dates ` +

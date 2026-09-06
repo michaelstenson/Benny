@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "description": "Benny — the Penguin Palace AI personal assistant. Shared calendar, chores, to-dos, bills, and pet care for Mer and Michael.",
   "type": "module",
-  "main": "server/index.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "nodemon server/index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
