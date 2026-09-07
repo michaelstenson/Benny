@@ -1,14 +1,14 @@
-// Reads and writes the one row in google_tokens that holds Michael's
-// Google OAuth tokens. Uses supabaseAdmin (the service_role client) since
-// that table has RLS enabled with no public policies — the regular anon
+// Reads and writes rows in google_tokens — one row per person, keyed by
+// ownerId ('michael' or 'mer'), each holding that person's own Google
+// OAuth tokens. Uses supabaseAdmin (the service_role client) since that
+// table has RLS enabled with no public policies — the regular anon
 // client literally cannot see it.
 
 import { supabaseAdmin } from './supabaseClient.js';
 
-// Hardcoded for now since only one account is connected. When Mer's
-// calendar gets added later, this becomes a parameter instead of a
-// constant, and each person gets their own row.
-const OWNER_ID = 'michael';
+// The only two people who can have a row here. Exported so routes can
+// validate an owner value before it ever reaches a query.
+export const OWNERS = ['michael', 'mer'];
 
 function requireAdminClient() {
   if (!supabaseAdmin) {
@@ -19,19 +19,27 @@ function requireAdminClient() {
   return supabaseAdmin;
 }
 
-export async function loadTokens() {
+function requireValidOwner(ownerId) {
+  if (!OWNERS.includes(ownerId)) {
+    throw new Error(`Unknown token owner "${ownerId}" — expected one of: ${OWNERS.join(', ')}`);
+  }
+}
+
+export async function loadTokens(ownerId) {
+  requireValidOwner(ownerId);
   const admin = requireAdminClient();
   const { data, error } = await admin
     .from('google_tokens')
     .select('*')
-    .eq('id', OWNER_ID)
+    .eq('id', ownerId)
     .maybeSingle();
 
   if (error) throw error;
-  return data; // null if never connected yet
+  return data; // null if this person hasn't connected yet
 }
 
-export async function saveTokens(tokens) {
+export async function saveTokens(ownerId, tokens) {
+  requireValidOwner(ownerId);
   const admin = requireAdminClient();
 
   // Google only sends a refresh_token the FIRST time you consent — later,
@@ -40,10 +48,10 @@ export async function saveTokens(tokens) {
   // that, we'd overwrite the real refresh_token with nothing and you'd
   // have to reconnect from scratch. So: keep whatever we already had
   // unless a new value actually showed up.
-  const existing = await loadTokens();
+  const existing = await loadTokens(ownerId);
 
   const merged = {
-    id: OWNER_ID,
+    id: ownerId,
     access_token: tokens.access_token ?? existing?.access_token,
     refresh_token: tokens.refresh_token ?? existing?.refresh_token,
     expiry_date: tokens.expiry_date ?? existing?.expiry_date,

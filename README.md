@@ -95,7 +95,7 @@ on top of it — starting with the shared calendar.
 ## Stage 2: Google Calendar
 
 This adds a "Connect Google Calendar" flow and a `/calendar.html` page that
-lists your upcoming events. Two setup steps are required beyond `.env.example`
+lists upcoming events. Two setup steps are required beyond `.env.example`
 that only you can do (they involve logging into your own accounts):
 
 1. **Google OAuth credentials** — from a project in
@@ -113,16 +113,48 @@ that only you can do (they involve logging into your own accounts):
    SUPABASE_SERVICE_ROLE_KEY=...
    ```
    This key bypasses Row Level Security entirely, which is exactly why the
-   `google_tokens` table (holding your OAuth tokens) has RLS turned on with
+   `google_tokens` table (holding OAuth tokens) has RLS turned on with
    no public policies — the regular anon key literally cannot read or write
    it. Only trusted server code (this app, never a browser) should ever
    hold this key.
 
 Once both are in `.env`, restart the server (`npm run dev` picks up new
 env vars on restart, not automatically), open http://localhost:3000/calendar.html,
-and click **Connect Google Calendar**. You'll go through Google's real
-consent screen, then land back on the calendar page showing your upcoming
-events.
+and click **Connect Michael's calendar** (or Mer's — see below).
+
+### Two people, one app: how "who's connecting" works
+
+Michael and Mer each connect their own Google account separately, and
+Benny merges both calendars into one read-only, chronologically sorted
+list (each event tagged with an `owner` so the UI can show a colored dot
+per person). There's exactly one Google Cloud project and one OAuth app —
+you don't create separate credentials per person — but two rows in
+`google_tokens` (`id = 'michael'`, `id = 'mer'`), one per connected
+account.
+
+The mechanism: `/auth/google/:owner` (`michael` or `mer`) redirects to
+Google with that owner stashed in OAuth's `state` parameter; Google
+echoes `state` back verbatim to `/auth/google/callback`, which is how a
+single shared callback route knows whose tokens it just received. This
+only works because the redirect URI is identical for both people — it's
+registered once in Google Cloud Console and never changes.
+
+**One Google Cloud Console step this needs**: if the OAuth consent
+screen is still in **Testing** mode (the default until you submit for
+verification), only email addresses explicitly added as **test users**
+can complete sign-in — so add Mer's Google account email under
+**APIs & Services → OAuth consent screen → Test users** before she tries
+to connect, or her attempt will fail at Google's consent screen before
+it ever reaches Benny.
+
+Do **not** create a Gmail API connector or grant any Gmail scope for
+this. Calendar and Gmail are separate Google APIs with separate
+permissions — Benny only ever requests
+`https://www.googleapis.com/auth/calendar.readonly` (see
+`server/lib/googleClient.js`), which covers reading calendar events and
+nothing about email. Reading email, or writing new events instead of
+just displaying them, would each need their own, broader scope granted
+deliberately later — neither is needed for read-only calendar display.
 
 ## Stage 3: Natural-language chores
 
@@ -331,11 +363,12 @@ GitHub repo.
 ## Roadmap (in order)
 
 1. ✅ Hello world — full stack wired together
-2. ✅ Shared calendar that auto-populates from email (Google Calendar connected; Mer's account and richer views come later)
+2. ✅ Shared calendar that auto-populates from email (Google Calendar connected for both Michael and Mer, merged into one read-only list)
 3. ✅ Natural-language chore list — confirmed working live
 4. ✅ Mutual to-do assignment — covered by the chores feature (every chore has an assignee already)
 5. ✅ Home energy/bills analyzer
 6. ✅ Deployed live to Vercel
-7. ⏳ Home sale comps tracker (code delivered; needs a RentCast key + `.env` values before the first weekly pull)
-8. Pet vet visit / treatment / food scheduling
-9. Smart home awareness (PowerView shades, Resideo/HomeKit, Eero)
+7. ✅ Home sale comps tracker — confirmed working live (RentCast free tier)
+8. ⏳ Visual redesign (dark-mode, playful/whimsical, family-color accents) — three mockup directions drafted for review, real direction not yet chosen/implemented
+9. Pet vet visit / treatment / food scheduling
+10. Smart home awareness (PowerView shades, Resideo/HomeKit, Eero)
