@@ -19,6 +19,7 @@ import { authRouter } from './server/routes/auth.js';
 import { calendarRouter } from './server/routes/calendar.js';
 import { choresRouter } from './server/routes/chores.js';
 import { billsRouter } from './server/routes/bills.js';
+import { compsRouter } from './server/routes/comps.js';
 
 // __dirname doesn't exist in ES modules by default, so we rebuild it —
 // this is the standard way to do it in a "type": "module" project.
@@ -47,6 +48,7 @@ app.use('/api', helloRouter);
 app.use('/api', calendarRouter);
 app.use('/api', choresRouter);
 app.use('/api', billsRouter);
+app.use('/api', compsRouter);
 
 // The Google sign-in handshake lives under /auth instead of /api, since
 // it's a browser redirect flow, not a JSON endpoint.

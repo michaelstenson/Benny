@@ -28,13 +28,16 @@ benny/
 │   │   ├── tokenStore.js       # reads/writes your Google tokens in Supabase
 │   │   ├── anthropicClient.js  # one shared Claude client
 │   │   ├── choreParser.js      # turns free text into {title, assignee, due_date} via Claude tool use
-│   │   └── billParser.js       # turns free text into {category, amount, billing_month} via Claude tool use
+│   │   ├── billParser.js       # turns free text into {category, amount, billing_month} via Claude tool use
+│   │   ├── rentcastClient.js   # calls RentCast's AVM endpoint for a home value + comps
+│   │   └── compsSummary.js     # turns that data into a short plain-language paragraph via Claude
 │   └── routes/
 │       ├── hello.js       # GET /api/hello — the hello-world endpoint
 │       ├── auth.js        # /auth/google + /auth/google/callback — the Google sign-in handshake
 │       ├── calendar.js    # /api/calendar/status + /api/calendar/events
 │       ├── chores.js      # /api/chores (GET/POST) + /api/chores/:id (PATCH)
-│       └── bills.js       # /api/bills (GET/POST) — includes the per-category summary
+│       ├── bills.js       # /api/bills (GET/POST) — includes the per-category summary
+│       └── comps.js       # /api/comps (GET) + /api/comps/refresh (GET, cron-only)
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
 │   ├── app.js              # browser-side JS that calls /api/hello
@@ -43,7 +46,9 @@ benny/
 │   ├── chores.html         # the chores page
 │   ├── chores.js           # browser-side JS for adding/listing/completing chores
 │   ├── bills.html          # the bills page
-│   └── bills.js            # browser-side JS for adding bills and rendering the summary
+│   ├── bills.js            # browser-side JS for adding bills and rendering the summary
+│   ├── comps.html          # the home comps page
+│   └── comps.js            # browser-side JS that renders the estimate + comps table
 ├── .env.example            # template for required environment variables
 ├── .env                     # your real values (never committed — see .gitignore)
 ├── vercel.json              # tells Vercel explicitly how to build/route the app
@@ -175,6 +180,83 @@ the two most recent bills in each one.
 No new setup is needed for this stage — it reuses the same `ANTHROPIC_API_KEY`
 from Stage 3.
 
+## Stage 7: Home sale comps tracker
+
+Michael and Mer are planning a move abroad, with the condo likely going up for sale around
+June/July 2027. This stage adds a `/comps.html` page that watches comparable home sales/listings
+in Logan Square, so they can casually track the market well ahead of listing — a real once-a-week
+"how's the neighborhood doing" glance, not something to obsess over daily.
+
+**Why not just use Zillow or Redfin directly?** Neither has a public API anymore, and both
+explicitly prohibit automated collection of their listing data in their terms of service — that
+restriction is about the site, not about which tool does the fetching, so there's no compliant
+way to have Benny pull data from them automatically.
+
+**What Benny uses instead:** [RentCast](https://www.rentcast.io/api)'s free developer tier (50
+requests/month, $0/mo) — specifically their `/v1/avm/value` endpoint. One call returns both an
+estimated home value *and* the actual comparable properties RentCast used to calculate it
+(address, price, sqft, beds/baths, status, days on market, distance, and a similarity score) —
+this is effectively an automated realtor CMA (comparative market analysis) in a single request.
+
+**How it works:**
+- `server/lib/rentcastClient.js` calls RentCast with your house's own details — address, property
+  type, bedrooms/bathrooms, square footage — all read from `.env`, not hardcoded, so remeasuring
+  the place or fixing a typo is a config edit, not a code change. `HOME_ADDRESS` never appears in
+  the repo, this README, or anywhere else — same treatment as your other secrets.
+- `server/lib/compsSummary.js` turns that data into a short plain-language paragraph via Claude.
+  This is a different pattern than `choreParser.js`/`billParser.js`: those force a strict schema
+  with tool use because we needed reliable structured fields out of messy sentences. Here it's the
+  opposite — the data's already clean and structured, and we want Claude to do what it's naturally
+  good at: turning numbers into a couple of readable sentences. No `tool_choice` needed.
+- `server/routes/comps.js` has two routes: `GET /api/comps` (read-only — what the page calls,
+  reads the latest pull from Supabase, never talks to RentCast directly) and
+  `GET /api/comps/refresh` (does the actual RentCast pull, only meant to be triggered by the
+  weekly cron job below).
+- Two new Supabase tables: `home_value_estimates` (one row per pull — this is the "trend over
+  time" series) and `home_comps` (one row per comparable property, linked to the pull it came
+  from). Same RLS-off treatment as `chores`/`bills` — no credentials in here.
+
+**The weekly job:** `vercel.json` now includes a `crons` entry that hits `/api/comps/refresh`
+every Monday. Vercel Cron Jobs always invoke via `GET` (not `POST`), which is why refresh is a GET
+route even though it changes data. It's protected by a `CRON_SECRET` environment variable — set
+that one variable in Vercel, and Vercel *automatically* sends it back as an
+`Authorization: Bearer <CRON_SECRET>` header whenever it triggers the job, so the route can verify
+the request actually came from Vercel's scheduler and not a stranger poking the URL. No manual
+pairing needed beyond setting the variable. (Cron jobs only run against your *production*
+deployment, and — on Vercel's free Hobby plan — at most once a day, which weekly is well within.)
+
+**Why weekly, and when that should change:** RentCast's free tier is 50 requests/month; weekly
+pulls use about 4-5 of those, leaving plenty of headroom. The data itself doesn't really reward
+checking more often than that this far from listing. Worth increasing to 2-3x/week once you're
+within a couple months of actually listing (around Q1-Q2 2027), to catch newly-listed competing
+homes faster while deciding on price and timing.
+
+**Comp matching:** a ~0.4 mile radius (`HOME_COMP_RADIUS_MILES`) — the same "neighborhood-standard"
+range a real appraiser or listing agent uses for a CMA — and 10 comps per pull
+(`HOME_COMP_COUNT`). The condo is registered as `HOME_PROPERTY_TYPE=Condo` (not `Townhouse`) even
+though it looks and lives like a rowhouse — it's legally a condominium (HOA, shared entry hallway),
+and Chicago prices true townhouses differently, so getting this field right matters for comp
+accuracy.
+
+**Setup:**
+```
+RENTCAST_API_KEY=...       # from app.rentcast.io — free tier, no credit card needed
+HOME_ADDRESS=...           # your full street address
+CRON_SECRET=...            # any random 16+ character string you generate yourself
+```
+`HOME_PROPERTY_TYPE`, `HOME_BEDROOMS`, `HOME_BATHROOMS`, `HOME_SQUARE_FOOTAGE`,
+`HOME_COMP_RADIUS_MILES`, and `HOME_COMP_COUNT` all have sensible defaults already set in
+`.env.example` — only override them if something changes. Once deployed with these set in Vercel's
+Production environment, the first pull happens automatically on the next Monday, or you can
+trigger one immediately by visiting `/api/comps/refresh` with the right `Authorization` header
+(or just temporarily unset `CRON_SECRET` in `.env` for one local test run).
+
+**Scoped out of v1, on purpose:** Cook County's official property sale records were considered as
+a free way to cross-check RentCast's numbers against actual recorded closings, but their open data
+doesn't support searching by address/radius directly — it would mean joining PIN numbers across
+three separate datasets (sales, property characteristics, address lookup). That's a lot of added
+complexity for what the single RentCast call already covers well. Worth revisiting later.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-quincy5.vercel.app** — Vercel is
@@ -252,6 +334,8 @@ GitHub repo.
 2. ✅ Shared calendar that auto-populates from email (Google Calendar connected; Mer's account and richer views come later)
 3. ✅ Natural-language chore list — confirmed working live
 4. ✅ Mutual to-do assignment — covered by the chores feature (every chore has an assignee already)
-5. ⏳ Home energy/bills analyzer (code delivered; reuses your existing Anthropic API key)
-6. Pet vet visit / treatment / food scheduling
-7. Smart home awareness (PowerView shades, Resideo/HomeKit, Eero)
+5. ✅ Home energy/bills analyzer
+6. ✅ Deployed live to Vercel
+7. ⏳ Home sale comps tracker (code delivered; needs a RentCast key + `.env` values before the first weekly pull)
+8. Pet vet visit / treatment / food scheduling
+9. Smart home awareness (PowerView shades, Resideo/HomeKit, Eero)

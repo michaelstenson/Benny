@@ -6,5 +6,6 @@
     { "src": "/auth/(.*)", "dest": "index.js" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "index.js" }
-  ]
+  ],
+  "crons": [{ "path": "/api/comps/refresh", "schedule": "0 13 * * 1" }]
 }

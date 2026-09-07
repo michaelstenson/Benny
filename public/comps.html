@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Benny — Home Comps</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+  <main class="max-w-2xl w-full bg-white rounded-2xl shadow-md p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-semibold text-slate-800">🐧 Home Comps</h1>
+      <a href="/" class="text-sm text-slate-400 hover:text-slate-600">← home</a>
+    </div>
+
+    <div id="loading" class="text-sm text-slate-400">Loading...</div>
+
+    <div id="content" class="hidden">
+      <div class="bg-slate-50 border border-slate-100 rounded-xl p-5 mb-6">
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Estimated value</p>
+        <p id="estimated-value" class="text-3xl font-semibold text-slate-800"></p>
+        <p id="estimated-range" class="text-xs text-slate-400 mt-1"></p>
+        <p id="summary" class="text-sm text-slate-600 mt-4 leading-relaxed"></p>
+        <p id="pulled-at" class="text-xs text-slate-400 mt-3"></p>
+      </div>
+
+      <div id="no-data" class="hidden text-sm text-slate-400 mb-6">
+        No comps pulled yet — the weekly job hasn't run yet, or hasn't run since this page was
+        set up. Visiting <code class="bg-slate-100 px-1 rounded">/api/comps/refresh</code> manually
+        (with your CRON_SECRET) will trigger the first pull.
+      </div>
+
+      <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+        Comparable properties
+      </h2>
+      <div class="overflow-x-auto -mx-2">
+        <table class="w-full text-sm min-w-[640px]">
+          <thead>
+            <tr class="text-left text-xs text-slate-400 uppercase tracking-wide">
+              <th class="px-2 py-2">Address</th>
+              <th class="px-2 py-2">Status</th>
+              <th class="px-2 py-2 text-right">Price</th>
+              <th class="px-2 py-2 text-right">$/sqft</th>
+              <th class="px-2 py-2 text-right">Bd/Ba</th>
+              <th class="px-2 py-2 text-right">DOM</th>
+              <th class="px-2 py-2 text-right">Dist.</th>
+            </tr>
+          </thead>
+          <tbody id="comps-body" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/comps.js"></script>
+</body>
+</html>
