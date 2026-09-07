@@ -46,6 +46,7 @@ benny/
 │   └── bills.js            # browser-side JS for adding bills and rendering the summary
 ├── .env.example            # template for required environment variables
 ├── .env                     # your real values (never committed — see .gitignore)
+├── vercel.json              # tells Vercel explicitly how to build/route the app
 └── package.json
 ```
 
@@ -180,17 +181,32 @@ Benny is deployed at **https://benny-quincy5.vercel.app** — Vercel is
 connected directly to this GitHub repo, so every `git push` to `main`
 automatically triggers a new deployment. No separate "deploy" step needed.
 
-**What had to change to make this work:** the first deploy attempt "succeeded"
-in about 30 milliseconds and produced a site with nothing running behind it.
-The build log showed Vercel never even ran `npm install`. The cause: Vercel's
-zero-config support for Express apps only looks for an entry file named
-`index`, `app`, or `server` (`.js`/`.ts`/etc.) **at the project root or under
-`src/`**. Our entry point was `server/index.js` — one folder off from where
-Vercel looks — so it wasn't recognized as an Express app at all, and got
-treated as a plain static site with no server behind it. The fix was moving
-that file to `index.js` at the project root (and updating `package.json`'s
-`main`/`start`/`dev` to match). Everything else — routes, lib, public — stays
-exactly where it was; only the one entry file had to move.
+**What had to change to make this work:** the first two deploy attempts
+"succeeded" in well under a second each and produced a site with nothing
+running behind it — hitting `/api/hello` returned a 404, meaning Express
+never actually ran; Vercel had just quietly deployed a static site instead.
+Two separate things needed fixing:
+
+1. **Entry file location.** Vercel's zero-config support for Express apps
+   looks for an entry file named `index`, `app`, or `server` (`.js`/`.ts`/etc.)
+   **at the project root or under `src/`**. Our entry point was
+   `server/index.js` — one folder off from where Vercel looks. Fixed by
+   moving it to `index.js` at the project root (and updating `package.json`'s
+   `main`/`start`/`dev` to match). Everything else — routes, lib, public —
+   stayed exactly where it was; only the one entry file had to move.
+2. **Explicit build config.** Even after the file moved, Vercel's automatic
+   detection still wasn't picking it up reliably. Rather than keep guessing
+   at undocumented detection behavior, we added a `vercel.json` that spells
+   out explicitly how to build and route the app: run `index.js` as a
+   Node.js serverless function (`@vercel/node`), send anything starting
+   with `/api/` or `/auth/` to it, and let Vercel's filesystem serving handle
+   everything else (which is what serves `public/**` automatically). This is
+   the older, more battle-tested way to deploy an Express app on Vercel, and
+   it doesn't depend on newer auto-detection working correctly.
+   `index.js` also now only calls `app.listen()` when run directly (i.e.
+   locally) — Vercel imports the file and uses its exported `app` instead of
+   ever calling `.listen()` itself, since a serverless function doesn't keep
+   a port open the way a normal server does.
 
 This is also why the `public/` folder lives at the project root rather than
 inside `server/`: on Vercel, `express.static()` is ignored entirely and

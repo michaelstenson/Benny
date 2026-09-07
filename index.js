@@ -22,7 +22,8 @@ import { billsRouter } from './server/routes/bills.js';
 
 // __dirname doesn't exist in ES modules by default, so we rebuild it —
 // this is the standard way to do it in a "type": "module" project.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +52,18 @@ app.use('/api', billsRouter);
 // it's a browser redirect flow, not a JSON endpoint.
 app.use('/auth', authRouter);
 
-app.listen(PORT, () => {
-  console.log(`Benny is running at http://localhost:${PORT}`);
-});
+// Only actually start listening on a port when this file is run directly
+// (`node index.js` / `npm run dev`, which is how local dev works). When
+// Vercel imports this file to wrap it as a serverless function, it does
+// NOT run it directly — it just reads the exported `app` below — so this
+// check keeps us from trying to open a port inside a serverless function,
+// which isn't how Vercel runs things.
+if (process.argv[1] === __filename) {
+  app.listen(PORT, () => {
+    console.log(`Benny is running at http://localhost:${PORT}`);
+  });
+}
+
+// Vercel wraps this exported Express app as a single serverless function —
+// this line is what makes that possible.
+export default app;
