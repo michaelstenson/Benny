@@ -4,32 +4,117 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Benny — Penguin Palace</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Nunito:wght@400;600;700&display=swap">
   <!-- Tailwind via CDN: zero build step, good enough until the app
-       outgrows it (that's when we'd introduce a bundler like Vite). -->
+       outgrows it (that's when we'd introduce a bundler like Vite). It
+       handles layout utilities (flex, grid, spacing); theme.css owns
+       color, type, and Benny's own components. -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/theme.css" />
 </head>
-<body class="min-h-screen bg-slate-50 flex items-center justify-center">
-  <main class="max-w-md w-full mx-4 bg-white rounded-2xl shadow-md p-8 text-center">
-    <div class="text-5xl mb-4">🐧</div>
-    <h1 class="text-2xl font-semibold text-slate-800">Benny</h1>
-    <p class="text-slate-500 mt-1">Penguin Palace's assistant, hello-world edition.</p>
+<body class="hl-page min-h-screen flex items-center justify-center p-6">
+  <main class="hl-card max-w-2xl w-full p-8">
 
-    <div id="status" class="mt-6 text-sm text-slate-400">Checking in with the backend...</div>
+    <div class="flex items-center justify-between flex-wrap gap-4">
+      <div class="flex items-center gap-4">
+        <div class="hl-logo">
+          <svg width="22" height="27" viewBox="0 0 100 122" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M76 46C90 52 94 66 90 78C82 74 72 66 68 56L76 46Z" fill="#F4ECD8"/>
+            <path d="M50 8C66 8 76 26 76 46V96C76 110 64 118 50 118C36 118 24 110 24 96V46C24 26 34 8 50 8Z" fill="#F4ECD8"/>
+            <path d="M50 30C58 30 62 42 62 54V100C62 108 57 112 50 112C43 112 38 108 38 100V54C38 42 42 30 50 30Z" fill="#211F2B"/>
+            <path d="M67 13L98 23L67 33Z" fill="#F2C879"/>
+            <circle cx="59" cy="18" r="3.4" fill="#211F2B"/>
+            <ellipse cx="40" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
+            <ellipse cx="60" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="hl-h1">Benny</h1>
+          <p class="hl-subtitle">Penguin Palace's assistant</p>
+        </div>
+      </div>
 
-    <div class="mt-6 flex flex-col gap-2">
-      <a href="/calendar.html" class="text-sm text-slate-500 hover:text-slate-700 underline">
-        Go to Calendar →
-      </a>
-      <a href="/chores.html" class="text-sm text-slate-500 hover:text-slate-700 underline">
-        Go to Chores →
-      </a>
-      <a href="/bills.html" class="text-sm text-slate-500 hover:text-slate-700 underline">
-        Go to Bills →
-      </a>
-      <a href="/comps.html" class="text-sm text-slate-500 hover:text-slate-700 underline">
-        Go to Home Comps →
-      </a>
+      <!-- string of party lights, in the family colors -->
+      <div class="hl-lights">
+        <span class="hl-dot" style="background:#34D399;box-shadow:0 0 8px #34D399;"></span>
+        <span class="hl-dot" style="background:#A78BFA;box-shadow:0 0 8px #A78BFA;"></span>
+        <span class="hl-dot" style="background:#38BDF8;box-shadow:0 0 8px #38BDF8;"></span>
+        <span class="hl-dot" style="background:#F2C879;box-shadow:0 0 8px #F2C879;"></span>
+        <span class="hl-dot" style="background:#34D399;box-shadow:0 0 8px #34D399;"></span>
+      </div>
     </div>
+
+    <div class="flex items-center justify-between flex-wrap gap-6 mt-10">
+      <div>
+        <h2 class="hl-hero-h1">Evening, flock.<br/>Here's the nest.</h2>
+        <p id="status" class="hl-subtitle mt-3 max-w-sm">Checking in with the backend...</p>
+      </div>
+      <div class="hl-logo hl-logo-lg">
+        <svg width="52" height="63" viewBox="0 0 100 122" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M76 46C90 52 94 66 90 78C82 74 72 66 68 56L76 46Z" fill="#F4ECD8"/>
+          <path d="M50 8C66 8 76 26 76 46V96C76 110 64 118 50 118C36 118 24 110 24 96V46C24 26 34 8 50 8Z" fill="#F4ECD8"/>
+          <path d="M50 30C58 30 62 42 62 54V100C62 108 57 112 50 112C43 112 38 108 38 100V54C38 42 42 30 50 30Z" fill="#211F2B"/>
+          <path d="M67 13L98 23L67 33Z" fill="#F2C879"/>
+          <circle cx="59" cy="18" r="3.4" fill="#211F2B"/>
+          <ellipse cx="40" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
+          <ellipse cx="60" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="hl-tile-grid mt-10">
+
+      <a href="/calendar.html" class="hl-tile" style="--glow:#7DD3FC;">
+        <div class="hl-tile-icon" style="background:rgba(125,211,252,0.14);color:#7DD3FC;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
+        </div>
+        <div class="hl-tile-title">Calendar</div>
+        <div class="hl-tile-desc">Michael &amp; Mer's shared calendar, side by side.</div>
+      </a>
+
+      <a href="/chores.html" class="hl-tile" style="--glow:#F4ECD8;">
+        <div class="hl-tile-icon" style="background:rgba(244,236,216,0.12);color:#D8CFC0;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h2l2 2 4-4"/><path d="M12 6h8"/><path d="M4 14h2l2 2 4-4"/><path d="M12 14h8"/></svg>
+        </div>
+        <div class="hl-tile-title">Chores</div>
+        <div class="hl-tile-desc">Add a chore in plain English, assign it, done.</div>
+      </a>
+
+      <a href="/bills.html" class="hl-tile" style="--glow:#F2C879;">
+        <div class="hl-tile-icon" style="background:rgba(242,200,121,0.16);color:#F2C879;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6"/></svg>
+        </div>
+        <div class="hl-tile-title">Bills</div>
+        <div class="hl-tile-desc">Log a bill, track it by category over time.</div>
+      </a>
+
+      <a href="/comps.html" class="hl-tile" style="--glow:#F2C879;">
+        <div class="hl-tile-icon" style="background:rgba(242,200,121,0.16);color:#F2C879;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg>
+        </div>
+        <div class="hl-tile-title">Home Comps</div>
+        <div class="hl-tile-desc">Nearby sale comps, pulled weekly.</div>
+      </a>
+
+    </div>
+
+    <!-- house lights legend -->
+    <div class="flex items-center flex-wrap gap-6 mt-10 pt-6" style="border-top:1px solid var(--hl-border);">
+      <span class="hl-label">House lights</span>
+      <div class="flex items-center gap-2">
+        <span class="hl-dot" style="background:#34D399;box-shadow:0 0 8px #34D399;"></span>
+        <span class="hl-dim text-sm">Michael</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="hl-dot" style="background:#A78BFA;box-shadow:0 0 8px #A78BFA;"></span>
+        <span class="hl-dim text-sm">Mer</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="hl-dot" style="background:#38BDF8;box-shadow:0 0 8px #38BDF8;"></span>
+        <span class="hl-dim text-sm">Quincy</span>
+      </div>
+    </div>
+
   </main>
 
   <script src="/app.js"></script>

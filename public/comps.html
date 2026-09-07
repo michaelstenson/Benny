@@ -4,39 +4,52 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Benny — Home Comps</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Nunito:wght@400;600;700&display=swap">
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/theme.css" />
 </head>
-<body class="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-  <main class="max-w-2xl w-full bg-white rounded-2xl shadow-md p-8">
+<body class="hl-page min-h-screen flex items-center justify-center p-6">
+  <main class="hl-card max-w-2xl w-full p-8">
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-semibold text-slate-800">🐧 Home Comps</h1>
-      <a href="/" class="text-sm text-slate-400 hover:text-slate-600">← home</a>
+      <div class="flex items-center gap-3">
+        <div class="hl-logo">
+          <svg width="20" height="24" viewBox="0 0 100 122" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M76 46C90 52 94 66 90 78C82 74 72 66 68 56L76 46Z" fill="#F4ECD8"/>
+            <path d="M50 8C66 8 76 26 76 46V96C76 110 64 118 50 118C36 118 24 110 24 96V46C24 26 34 8 50 8Z" fill="#F4ECD8"/>
+            <path d="M50 30C58 30 62 42 62 54V100C62 108 57 112 50 112C43 112 38 108 38 100V54C38 42 42 30 50 30Z" fill="#211F2B"/>
+            <path d="M67 13L98 23L67 33Z" fill="#F2C879"/>
+            <circle cx="59" cy="18" r="3.4" fill="#211F2B"/>
+            <ellipse cx="40" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
+            <ellipse cx="60" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
+          </svg>
+        </div>
+        <h1 class="hl-h1">Home Comps</h1>
+      </div>
+      <a href="/" class="hl-back">← home</a>
     </div>
 
-    <div id="loading" class="text-sm text-slate-400">Loading...</div>
+    <div id="loading" class="hl-muted text-sm">Loading...</div>
 
     <div id="content" class="hidden">
-      <div class="bg-slate-50 border border-slate-100 rounded-xl p-5 mb-6">
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Estimated value</p>
-        <p id="estimated-value" class="text-3xl font-semibold text-slate-800"></p>
-        <p id="estimated-range" class="text-xs text-slate-400 mt-1"></p>
-        <p id="summary" class="text-sm text-slate-600 mt-4 leading-relaxed"></p>
-        <p id="pulled-at" class="text-xs text-slate-400 mt-3"></p>
+      <div class="hl-inset mb-6">
+        <p class="hl-label mb-1">Estimated value</p>
+        <p id="estimated-value" class="text-3xl font-semibold" style="font-family:'Baloo 2',sans-serif;color:var(--hl-text);"></p>
+        <p id="estimated-range" class="text-xs hl-muted mt-1"></p>
+        <p id="summary" class="text-sm hl-dim mt-4 leading-relaxed"></p>
+        <p id="pulled-at" class="text-xs hl-muted mt-3"></p>
       </div>
 
-      <div id="no-data" class="hidden text-sm text-slate-400 mb-6">
+      <div id="no-data" class="hidden text-sm hl-muted mb-6">
         No comps pulled yet — the weekly job hasn't run yet, or hasn't run since this page was
-        set up. Visiting <code class="bg-slate-100 px-1 rounded">/api/comps/refresh</code> manually
+        set up. Visiting <span class="hl-code">/api/comps/refresh</span> manually
         (with your CRON_SECRET) will trigger the first pull.
       </div>
 
-      <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
-        Comparable properties
-      </h2>
+      <h2 class="hl-label mb-2">Comparable properties</h2>
       <div class="overflow-x-auto -mx-2">
-        <table class="w-full text-sm min-w-[640px]">
+        <table class="hl-table w-full min-w-[640px]">
           <thead>
-            <tr class="text-left text-xs text-slate-400 uppercase tracking-wide">
+            <tr class="text-left">
               <th class="px-2 py-2">Address</th>
               <th class="px-2 py-2">Status</th>
               <th class="px-2 py-2 text-right">Price</th>
@@ -46,7 +59,7 @@
               <th class="px-2 py-2 text-right">Dist.</th>
             </tr>
           </thead>
-          <tbody id="comps-body" class="divide-y divide-slate-100"></tbody>
+          <tbody id="comps-body"></tbody>
         </table>
       </div>
     </div>

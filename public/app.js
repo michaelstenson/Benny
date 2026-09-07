@@ -15,11 +15,12 @@ async function checkIn() {
       : `⚠️ Supabase check failed${data.supabaseError ? `: ${data.supabaseError}` : ''}`;
 
     statusEl.innerHTML = `
-      <p class="text-slate-700">${data.message}</p>
-      <p class="mt-2">${dbLine}</p>
+      <span class="hl-dim">${data.message}</span>
+      <span class="block mt-1">${dbLine}</span>
     `;
   } catch (err) {
     statusEl.textContent = `Could not reach the backend: ${err.message}`;
+    statusEl.classList.add('hl-error');
   }
 }
 

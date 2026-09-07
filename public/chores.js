@@ -4,6 +4,9 @@ const addStatus = document.getElementById('add-status');
 const choresEl = document.getElementById('chores');
 
 const ASSIGNEE_LABEL = { michael: 'Michael', mer: 'Mer' };
+// Same family colors used everywhere else (calendar dots, the house-lights
+// legend) — an assignee chip should mean the same thing here too.
+const ASSIGNEE_COLOR = { michael: '#34D399', mer: '#A78BFA' };
 
 function formatDueDate(dueDate) {
   if (!dueDate) return null;
@@ -15,6 +18,10 @@ function formatDueDate(dueDate) {
 
 function choreRow(chore) {
   const dueLabel = formatDueDate(chore.due_date);
+  const color = ASSIGNEE_COLOR[chore.assignee];
+  const chipStyle = color
+    ? `background:${color}29;color:${color};`
+    : 'background:rgba(255,255,255,0.08);color:var(--hl-text-dim);';
   return `
     <li class="py-3 flex items-start gap-3">
       <input
@@ -24,9 +31,9 @@ function choreRow(chore) {
         class="mt-1 chore-checkbox"
       />
       <div class="flex-1 ${chore.completed ? 'opacity-40 line-through' : ''}">
-        <p class="text-slate-800">${chore.title}</p>
-        <p class="text-xs text-slate-500 mt-0.5">
-          <span class="inline-block bg-slate-100 rounded px-1.5 py-0.5">${ASSIGNEE_LABEL[chore.assignee] || chore.assignee}</span>
+        <p class="hl-dim">${chore.title}</p>
+        <p class="text-xs hl-muted mt-1">
+          <span class="hl-chip" style="${chipStyle}">${ASSIGNEE_LABEL[chore.assignee] || chore.assignee}</span>
           ${dueLabel ? ' · due ' + dueLabel : ''}
         </p>
       </div>
@@ -39,12 +46,12 @@ async function loadChores() {
   const data = await response.json();
 
   if (!response.ok) {
-    choresEl.innerHTML = `<li class="py-4 text-sm text-red-600">${data.error || 'Could not load chores.'}</li>`;
+    choresEl.innerHTML = `<li class="py-4 text-sm hl-error">${data.error || 'Could not load chores.'}</li>`;
     return;
   }
 
   if (data.chores.length === 0) {
-    choresEl.innerHTML = '<li class="py-4 text-slate-400 text-sm">No chores yet — add one above.</li>';
+    choresEl.innerHTML = '<li class="py-4 hl-muted text-sm">No chores yet — add one above.</li>';
     return;
   }
 

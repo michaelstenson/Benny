@@ -28,15 +28,15 @@ function formatDate(dateString) {
 function compRow(comp) {
   return `
     <tr>
-      <td class="px-2 py-2 text-slate-700">${comp.formatted_address || '—'}</td>
-      <td class="px-2 py-2 text-slate-500">${comp.status || '—'}</td>
-      <td class="px-2 py-2 text-right text-slate-800">${currency(comp.price)}</td>
-      <td class="px-2 py-2 text-right text-slate-500">${
+      <td class="px-2 py-2 hl-dim">${comp.formatted_address || '—'}</td>
+      <td class="px-2 py-2 hl-muted">${comp.status || '—'}</td>
+      <td class="px-2 py-2 text-right hl-dim">${currency(comp.price)}</td>
+      <td class="px-2 py-2 text-right hl-muted">${
         comp.price_per_sqft ? currency(comp.price_per_sqft) : '—'
       }</td>
-      <td class="px-2 py-2 text-right text-slate-500">${comp.bedrooms ?? '—'}/${comp.bathrooms ?? '—'}</td>
-      <td class="px-2 py-2 text-right text-slate-500">${comp.days_on_market ?? '—'}</td>
-      <td class="px-2 py-2 text-right text-slate-500">${
+      <td class="px-2 py-2 text-right hl-muted">${comp.bedrooms ?? '—'}/${comp.bathrooms ?? '—'}</td>
+      <td class="px-2 py-2 text-right hl-muted">${comp.days_on_market ?? '—'}</td>
+      <td class="px-2 py-2 text-right hl-muted">${
         comp.distance_miles != null ? `${comp.distance_miles.toFixed(2)} mi` : '—'
       }</td>
     </tr>
@@ -70,7 +70,7 @@ async function loadComps() {
 
   compsBodyEl.innerHTML =
     data.comps.length === 0
-      ? '<tr><td colspan="7" class="px-2 py-4 text-slate-400">No comps in this pull.</td></tr>'
+      ? '<tr><td colspan="7" class="px-2 py-4 hl-muted">No comps in this pull.</td></tr>'
       : data.comps.map(compRow).join('');
 }
 

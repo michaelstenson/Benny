@@ -1,0 +1,258 @@
+/*
+ * Benny's visual theme — "Harbor Lights".
+ *
+ * Chosen from three directions mocked up in Claude Design (Fireside's warm,
+ * uniform tile layout + Night Deck's neon edge-glow, with a bigger, clearer
+ * penguin mark replacing an earlier ambiguous graphic). One shared
+ * stylesheet so every page — home, calendar, chores, bills, comps — reads
+ * as the same app. Tailwind (loaded per-page via CDN) still handles layout
+ * utilities (flex, grid, spacing, sizing); this file owns color, type, and
+ * the app's own components (cards, tiles, the penguin mark, form controls).
+ *
+ * Family colors are reserved for tagging PEOPLE (event dots, chore
+ * assignees, the house-lights legend) — never reused as generic category
+ * colors elsewhere, so a color always means the same person everywhere.
+ */
+
+:root {
+  --hl-bg: #17151f;
+  --hl-bg-elev: #211f2b;
+  --hl-panel: rgba(255, 255, 255, 0.05);
+  --hl-panel-strong: rgba(255, 255, 255, 0.07);
+  --hl-border: rgba(255, 255, 255, 0.08);
+  --hl-border-strong: rgba(255, 255, 255, 0.14);
+
+  --hl-text: #f4ecd8;
+  --hl-text-dim: #d8cfc0;
+  --hl-text-mute: #c9beac;
+  --hl-text-faint: #b7ac98;
+  --hl-label: #8b8071;
+
+  --hl-gold: #f2c879;
+  --hl-gold-hover: #f7dba0;
+  --hl-gold-soft: rgba(242, 200, 121, 0.16);
+
+  /* Family colors — Michael, Mer, Quincy (matches the Philips Hue scenes). */
+  --hl-michael: #34d399;
+  --hl-mer: #a78bfa;
+  --hl-quincy: #38bdf8;
+
+  /* Status colors — deliberately NOT a family color, so "bill went up"
+     never reads as "this is Michael's". */
+  --hl-up: #e2685a;
+  --hl-down: #4fb6a8;
+}
+
+body.hl-page {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--hl-text);
+  background-color: var(--hl-bg);
+  background-image:
+    radial-gradient(480px 480px at -8% -10%, rgba(52, 211, 153, 0.16), transparent 70%),
+    radial-gradient(520px 520px at 95% -12%, rgba(167, 139, 250, 0.15), transparent 70%),
+    radial-gradient(560px 560px at 45% 115%, rgba(56, 189, 248, 0.13), transparent 70%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+a { color: var(--hl-gold); text-decoration: none; }
+a:hover { color: var(--hl-gold-hover); }
+
+/* Card: the app's one panel component, replacing the old white card. */
+.hl-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hl-border);
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+/* Page header: penguin mark + wordmark/page title + back link. */
+.hl-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--hl-bg-elev);
+  border: 1px solid rgba(242, 200, 121, 0.3);
+  box-shadow: 0 0 18px rgba(242, 200, 121, 0.25);
+  border-radius: 14px;
+  width: 44px;
+  height: 44px;
+}
+.hl-logo-lg {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  box-shadow: 0 0 34px rgba(242, 200, 121, 0.25), 0 0 60px rgba(167, 139, 250, 0.12);
+}
+
+.hl-h1 {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--hl-text);
+  margin: 0;
+  line-height: 1.2;
+}
+.hl-hero-h1 {
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 32px;
+  color: var(--hl-text);
+  margin: 0;
+  line-height: 1.2;
+}
+.hl-subtitle { font-size: 13px; color: var(--hl-text-mute); margin-top: 2px; }
+.hl-back { font-size: 13px; color: var(--hl-text-faint); }
+.hl-back:hover { color: var(--hl-gold); }
+
+.hl-muted { color: var(--hl-text-faint); }
+.hl-dim { color: var(--hl-text-dim); }
+.hl-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--hl-label);
+  font-weight: 700;
+}
+.hl-up { color: var(--hl-up); }
+.hl-down { color: var(--hl-down); }
+.hl-error { color: var(--hl-up); }
+
+.hl-code {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--hl-text-dim);
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-family: ui-monospace, 'SFMono-Regular', monospace;
+  font-size: 12px;
+}
+
+/* Form controls */
+.hl-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--hl-border-strong);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--hl-text);
+}
+.hl-input::placeholder { color: var(--hl-text-faint); }
+.hl-input:focus {
+  outline: none;
+  border-color: var(--hl-gold);
+  box-shadow: 0 0 0 3px var(--hl-gold-soft);
+}
+.hl-button {
+  background: var(--hl-gold);
+  color: #211f2b;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.hl-button:hover { background: var(--hl-gold-hover); }
+.hl-button:disabled { opacity: 0.5; cursor: default; }
+
+input[type='checkbox'] {
+  accent-color: var(--hl-gold);
+  width: 16px;
+  height: 16px;
+}
+
+/* Lists — replaces Tailwind's divide-* utilities, which assume light borders */
+.hl-divide > * + * { border-top: 1px solid var(--hl-border); }
+
+/* Chips (e.g. a chore's assignee) */
+.hl-chip {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Inset panel — a lighter nested box inside .hl-card (e.g. comps' estimate box) */
+.hl-inset {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--hl-border);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+/* Table (Home Comps) */
+.hl-table { width: 100%; font-size: 14px; border-collapse: collapse; }
+.hl-table thead th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--hl-label);
+  font-weight: 700;
+}
+.hl-table tbody td { color: var(--hl-text-dim); }
+.hl-table tbody tr + tr td { border-top: 1px solid var(--hl-border); }
+
+/* Nav tile grid — plain CSS rather than a Tailwind responsive utility, so
+   the 2-column layout doesn't depend on the CDN's JIT scanner timing. */
+.hl-tile-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+@media (min-width: 560px) {
+  .hl-tile-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* Nav tiles (home page) */
+.hl-tile {
+  position: relative;
+  background: var(--hl-panel);
+  border-radius: 20px;
+  padding: 22px;
+  display: block;
+}
+.hl-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  padding: 1px;
+  background: linear-gradient(150deg, var(--glow, var(--hl-gold)), transparent 65%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.hl-tile:hover { background: rgba(255, 255, 255, 0.07); }
+.hl-tile-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.hl-tile-title { font-family: 'Baloo 2', sans-serif; font-size: 17px; font-weight: 600; color: var(--hl-text); }
+.hl-tile-desc { font-size: 13px; color: var(--hl-text-faint); line-height: 1.5; margin-top: 4px; }
+
+/* Party lights strip + dots (home header) */
+.hl-lights {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--hl-panel-strong);
+  border: 1px solid var(--hl-border);
+}
+.hl-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.hl-dot-sm { width: 7px; height: 7px; }

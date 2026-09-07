@@ -56,10 +56,7 @@ async function renderConnectRow() {
   connectRowEl.innerHTML = disconnected
     .map(
       (owner) => `
-    <a
-      href="/auth/google/${owner}"
-      class="inline-block text-center bg-slate-800 text-white px-4 py-2 rounded-lg text-sm hover:bg-slate-700 transition"
-    >
+    <a href="/auth/google/${owner}" class="hl-button inline-block text-center">
       Connect ${OWNER_META[owner].label}'s calendar
     </a>
   `
@@ -100,7 +97,7 @@ async function loadEvents() {
   eventsEl.classList.remove('hidden');
 
   if (data.events.length === 0) {
-    eventsEl.innerHTML = '<li class="py-4 text-slate-400 text-sm">No upcoming events found.</li>';
+    eventsEl.innerHTML = '<li class="py-4 hl-muted text-sm">No upcoming events found.</li>';
     return;
   }
 
@@ -109,15 +106,15 @@ async function loadEvents() {
       const meta = OWNER_META[event.owner];
       return `
     <li class="py-3">
-      <p class="text-slate-800 font-medium flex items-center gap-2">
+      <p class="font-medium flex items-center gap-2">
         ${
           meta
-            ? `<span class="inline-block w-2 h-2 rounded-full flex-shrink-0" style="background:${meta.color}" title="${meta.label}"></span>`
+            ? `<span class="hl-dot flex-shrink-0" style="background:${meta.color};box-shadow:0 0 6px ${meta.color};" title="${meta.label}"></span>`
             : ''
         }
         ${event.title}
       </p>
-      <p class="text-sm text-slate-500">
+      <p class="text-sm hl-muted mt-0.5">
         ${formatWhen(event)}${event.location ? ' · ' + event.location : ''}
       </p>
     </li>

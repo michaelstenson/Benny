@@ -20,23 +20,23 @@ function capitalize(word) {
 
 function trendBadge(percentChange) {
   if (percentChange === null) {
-    return '<span class="text-slate-400">first bill on record</span>';
+    return '<span class="hl-muted">first bill on record</span>';
   }
   const rounded = Math.round(percentChange);
-  if (rounded === 0) return '<span class="text-slate-400">flat vs last time</span>';
+  if (rounded === 0) return '<span class="hl-muted">flat vs last time</span>';
   const up = rounded > 0;
-  return `<span class="${up ? 'text-red-600' : 'text-green-600'}">${up ? '▲' : '▼'} ${Math.abs(rounded)}% vs last time</span>`;
+  return `<span class="${up ? 'hl-up' : 'hl-down'}">${up ? '▲' : '▼'} ${Math.abs(rounded)}% vs last time</span>`;
 }
 
 function summaryRow(entry) {
   return `
     <li class="py-3 flex items-center justify-between">
       <div>
-        <p class="text-slate-800 font-medium">${capitalize(entry.category)}</p>
-        <p class="text-xs text-slate-500">${formatMonth(entry.latest.billing_month)}</p>
+        <p class="hl-dim font-medium">${capitalize(entry.category)}</p>
+        <p class="text-xs hl-muted">${formatMonth(entry.latest.billing_month)}</p>
       </div>
       <div class="text-right">
-        <p class="text-slate-800 font-medium">${currency(entry.latest.amount)}</p>
+        <p class="hl-dim font-medium">${currency(entry.latest.amount)}</p>
         <p class="text-xs">${trendBadge(entry.percentChange)}</p>
       </div>
     </li>
@@ -46,8 +46,8 @@ function summaryRow(entry) {
 function historyRow(bill) {
   return `
     <li class="py-2 flex items-center justify-between text-sm">
-      <span class="text-slate-600">${capitalize(bill.category)} · ${formatMonth(bill.billing_month)}</span>
-      <span class="text-slate-800">${currency(bill.amount)}</span>
+      <span class="hl-muted">${capitalize(bill.category)} · ${formatMonth(bill.billing_month)}</span>
+      <span class="hl-dim">${currency(bill.amount)}</span>
     </li>
   `;
 }
@@ -57,14 +57,14 @@ async function loadBills() {
   const data = await response.json();
 
   if (!response.ok) {
-    summaryEl.innerHTML = `<li class="py-4 text-sm text-red-600">${data.error || 'Could not load bills.'}</li>`;
+    summaryEl.innerHTML = `<li class="py-4 text-sm hl-error">${data.error || 'Could not load bills.'}</li>`;
     historyEl.innerHTML = '';
     return;
   }
 
   summaryEl.innerHTML =
     data.summary.length === 0
-      ? '<li class="py-2 text-slate-400 text-sm">No bills logged yet — add one above.</li>'
+      ? '<li class="py-2 hl-muted text-sm">No bills logged yet — add one above.</li>'
       : data.summary.map(summaryRow).join('');
 
   historyEl.innerHTML =
