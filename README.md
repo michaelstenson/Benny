@@ -30,14 +30,18 @@ benny/
 │   │   ├── choreParser.js      # turns free text into {title, assignee, due_date} via Claude tool use
 │   │   ├── billParser.js       # turns free text into {category, amount, billing_month} via Claude tool use
 │   │   ├── rentcastClient.js   # calls RentCast's AVM endpoint for a home value + comps
-│   │   └── compsSummary.js     # turns that data into a short plain-language paragraph via Claude
+│   │   ├── compsSummary.js     # turns that data into a short plain-language paragraph via Claude
+│   │   ├── resideoClient.js    # talks to Resideo's thermostat API directly (no SDK)
+│   │   └── resideoTokenStore.js # reads/writes the one Resideo token row in Supabase
 │   └── routes/
 │       ├── hello.js       # GET /api/hello — the hello-world endpoint
 │       ├── auth.js        # /auth/google + /auth/google/callback — the Google sign-in handshake
 │       ├── calendar.js    # /api/calendar/status + /api/calendar/events
 │       ├── chores.js      # /api/chores (GET/POST) + /api/chores/:id (PATCH)
 │       ├── bills.js       # /api/bills (GET/POST) — includes the per-category summary
-│       └── comps.js       # /api/comps (GET) + /api/comps/refresh (GET, cron-only)
+│       ├── comps.js       # /api/comps (GET) + /api/comps/refresh (GET, cron-only)
+│       ├── resideoAuth.js # /auth/resideo + /auth/resideo/callback — the Resideo sign-in handshake
+│       └── smarthome.js   # /api/smarthome/status + /api/smarthome/thermostats
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
 │   ├── app.js              # browser-side JS that calls /api/hello
@@ -48,7 +52,9 @@ benny/
 │   ├── bills.html          # the bills page
 │   ├── bills.js            # browser-side JS for adding bills and rendering the summary
 │   ├── comps.html          # the home comps page
-│   └── comps.js            # browser-side JS that renders the estimate + comps table
+│   ├── comps.js            # browser-side JS that renders the estimate + comps table
+│   ├── smarthome.html      # the smart home page
+│   └── smarthome.js        # browser-side JS that renders thermostat status
 ├── .env.example            # template for required environment variables
 ├── .env                     # your real values (never committed — see .gitignore)
 ├── vercel.json              # tells Vercel explicitly how to build/route the app
@@ -289,6 +295,68 @@ doesn't support searching by address/radius directly — it would mean joining P
 three separate datasets (sales, property characteristics, address lookup). That's a lot of added
 complexity for what the single RentCast call already covers well. Worth revisiting later.
 
+## Stage 8: Smart home awareness — thermostat status (read-only)
+
+Adds a `/smarthome.html` page showing each thermostat's current indoor
+temperature, mode (heat/cool/auto), and setpoint, pulled live from your
+Resideo (Honeywell Home) account. This is the first slice of "smart home
+awareness" — no control, no shades yet, no automation logic. Just proving
+the connection, the same spirit as Stage 1's hello-world.
+
+**How it works:** `server/lib/resideoClient.js` talks to Resideo's REST
+API directly with `fetch()` (there's no SDK like `googleapis` for this
+one). `server/routes/resideoAuth.js` handles the "Connect thermostat"
+OAuth handshake — simpler than the Google flow since there's only ever
+one household thermostat account to connect, not two people's separate
+accounts, so there's no `state`-based owner routing needed.
+`server/routes/smarthome.js` exposes `/api/smarthome/status` (connected
+or not) and `/api/smarthome/thermostats` (the live data), refreshing the
+access token first if it's expired or about to be.
+
+**A real gotcha that shaped `resideoTokenStore.js`:** Google only issues
+a new `refresh_token` the first time you consent, and quietly reuses the
+old one after that (see `tokenStore.js`'s merge logic). Resideo does the
+opposite — every single exchange or refresh call returns a brand new
+`refresh_token`, and the previous one stops working immediately. So
+`resideoTokenStore.js` always overwrites the stored refresh token rather
+than falling back to the old value. Getting this backwards would work
+fine for the first ~few minutes (until the access token expires) and
+then silently break the connection.
+
+**Data model:** one new Supabase table, `resideo_tokens` — a single row
+(`id = 'household'`) rather than one-per-person like `google_tokens`,
+since Resideo connects once for the whole house. Same RLS-on,
+no-public-policies treatment as `google_tokens`, since it holds
+credentials.
+
+**Setup:**
+```
+RESIDEO_CLIENT_ID=...
+RESIDEO_CLIENT_SECRET=...
+RESIDEO_REDIRECT_URI=http://localhost:3000/auth/resideo/callback
+```
+Register an app at [developer.honeywellhome.com](https://developer.honeywellhome.com/api-methods)
+to get the client id/secret. There's no sandbox or simulator — this only
+works against a real Resideo thermostat already on your account. Like
+Google, the production `RESIDEO_REDIRECT_URI` needs to point at the live
+domain once deployed, added as an environment variable in Vercel.
+
+**Scoped out of this stage, on purpose:**
+- **PowerView shades** — Hunter-Douglas's hub only exposes its API on
+  your home's local network, which a Vercel-hosted app has no way to
+  reach directly (unlike Resideo, which is a real cloud API). Adding
+  shades needs either an always-on device at home running a small poller
+  that pushes status into Supabase (same shape as the RentCast weekly
+  cron, just triggered from home instead of Vercel), or accepting that
+  shade status only works for local/self-hosted runs. Also still
+  depends on which PowerView hub generation you have — Gen 3 uses
+  Bluetooth LE and doesn't have the mature local-API story older
+  PowerView hubs do.
+- **Any control** (changing the setpoint, moving a shade) — read-only
+  only, same as Stage 2's calendar.
+- **Any automation/decision-making** — this stage doesn't reason about
+  anything; it just displays current state.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-quincy5.vercel.app** — Vercel is
@@ -369,6 +437,6 @@ GitHub repo.
 5. ✅ Home energy/bills analyzer
 6. ✅ Deployed live to Vercel
 7. ✅ Home sale comps tracker — confirmed working live (RentCast free tier)
-8. ⏳ Visual redesign (dark-mode, playful/whimsical, family-color accents) — three mockup directions drafted for review, real direction not yet chosen/implemented
+8. ✅ Visual redesign — "Harbor Lights" direction chosen and implemented (dark, neon edge-glow, family-color accents), shared across every page via `public/theme.css`
 9. Pet vet visit / treatment / food scheduling
-10. Smart home awareness (PowerView shades, Resideo/HomeKit, Eero)
+10. ⏳ Smart home awareness — thermostat status (Resideo) done and read-only; PowerView shades blocked on hub generation + finding an always-on device at home to bridge the local hub API to the cloud app (see Stage 8 above)
