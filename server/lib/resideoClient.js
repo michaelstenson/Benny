@@ -90,6 +90,57 @@ export async function fetchLocations(accessToken) {
   return data; // array of locations, each with a `devices` array
 }
 
+// Gets one thermostat's full current state, including the raw
+// `changeableValues` object — used before a control write, since Resideo
+// expects the FULL changeableValues on every write (see
+// submitThermostatControl below), not just the one field being changed.
+export async function fetchThermostat(accessToken, { locationId, deviceId }) {
+  const { clientId } = requireCredentials();
+  const url =
+    `${RESIDEO_API_BASE}/v2/devices/thermostats/${encodeURIComponent(deviceId)}` +
+    `?apikey=${encodeURIComponent(clientId)}&locationId=${encodeURIComponent(locationId)}`;
+
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`Resideo device request failed: ${data.message || response.status}`);
+  }
+  return data;
+}
+
+// Writes a new mode/setpoint. Resideo's "submit control" endpoint takes a
+// full changeableValues object and replaces it wholesale — sending just
+// `{ heatSetpoint: 70 }` risks the API rejecting the request or silently
+// dropping other fields (autoChangeoverActive, etc.), so callers must
+// pass the current changeableValues merged with whatever's changing
+// (see the read-modify-write in server/routes/smarthome.js).
+export async function submitThermostatControl(accessToken, { locationId, deviceId, changeableValues }) {
+  const { clientId } = requireCredentials();
+  const url =
+    `${RESIDEO_API_BASE}/v2/devices/thermostats/${encodeURIComponent(deviceId)}` +
+    `?apikey=${encodeURIComponent(clientId)}&locationId=${encodeURIComponent(locationId)}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(changeableValues),
+  });
+
+  if (!response.ok) {
+    let message = response.status;
+    try {
+      const data = await response.json();
+      message = data.message || data.error || message;
+    } catch {
+      // response body wasn't JSON — fall back to the status code above
+    }
+    throw new Error(`Resideo control request failed: ${message}`);
+  }
+}
+
 // Thermostats are identified by having `changeableValues` — Resideo
 // locations can also contain other device types (sensors, etc.) that
 // don't have it, so this is how we tell them apart without a dedicated

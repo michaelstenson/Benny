@@ -1,12 +1,22 @@
-// Read-only smart home status — Stage 8a. Just proves the Resideo
-// connection end to end (current thermostat mode/temp/setpoint); no
-// control, no shades yet, no automation logic. See README "Stage 8" for
-// why shades aren't here yet (PowerView's hub is local-network-only,
-// which doesn't reach a Vercel-hosted app the way Resideo's cloud API does).
+// Smart home status + control. Stage 8a proved the Resideo connection
+// end to end (read-only); Stage 8b added thermostat control. Stage 8c
+// added shade status, read from Supabase rather than a live device call —
+// see server/routes/smarthome.js's /smarthome/shades handler and the
+// powerview-bridge/ folder for why (PowerView's hub is local-network-only,
+// so a Raspberry Pi on the home network polls it and pushes status into
+// Supabase, the same shape as the RentCast weekly cron, just triggered
+// from home instead of Vercel).
 
 import { Router } from 'express';
-import { refreshAccessToken, fetchLocations, extractThermostats } from '../lib/resideoClient.js';
+import {
+  refreshAccessToken,
+  fetchLocations,
+  extractThermostats,
+  fetchThermostat,
+  submitThermostatControl,
+} from '../lib/resideoClient.js';
 import { loadResideoTokens, saveResideoTokens } from '../lib/resideoTokenStore.js';
+import { supabase } from '../lib/supabaseClient.js';
 
 export const smarthomeRouter = Router();
 
@@ -53,5 +63,60 @@ smarthomeRouter.get('/smarthome/thermostats', async (req, res) => {
   } catch (err) {
     console.error('[smarthome] failed to fetch thermostats:', err.message);
     res.status(500).json({ error: 'Could not load thermostat status.' });
+  }
+});
+
+// PATCH /api/smarthome/thermostats/:deviceId — change mode and/or
+// setpoint(s). Body: { locationId, mode?, heatSetpoint?, coolSetpoint? }.
+// Reads the device's current changeableValues fresh (not from whatever
+// the browser last saw, which could be stale) and merges the requested
+// change on top, since Resideo requires the full object on every write.
+smarthomeRouter.patch('/smarthome/thermostats/:deviceId', async (req, res) => {
+  const { deviceId } = req.params;
+  const { locationId, mode, heatSetpoint, coolSetpoint } = req.body || {};
+
+  if (!locationId) {
+    return res.status(400).json({ error: 'locationId is required.' });
+  }
+
+  try {
+    const accessToken = await getValidAccessToken();
+    if (!accessToken) {
+      return res.status(401).json({ error: 'The thermostat is not connected yet.' });
+    }
+
+    const current = await fetchThermostat(accessToken, { locationId, deviceId });
+    const changeableValues = {
+      ...current.changeableValues,
+      ...(mode !== undefined && { mode }),
+      ...(heatSetpoint !== undefined && { heatSetpoint }),
+      ...(coolSetpoint !== undefined && { coolSetpoint }),
+    };
+
+    await submitThermostatControl(accessToken, { locationId, deviceId, changeableValues });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[smarthome] failed to update thermostat:', err.message);
+    res.status(500).json({ error: err.message || 'Could not update the thermostat.' });
+  }
+});
+
+// GET /api/smarthome/shades — the latest position/battery status the
+// Raspberry Pi bridge (powerview-bridge/) last pushed for each shade.
+// This never talks to the PowerView hub directly (it can't — the hub
+// only answers on the home LAN) — it just reads whatever Supabase row
+// the bridge most recently upserted.
+smarthomeRouter.get('/smarthome/shades', async (req, res) => {
+  try {
+    const { data: shades, error } = await supabase
+      .from('powerview_shades')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+    res.json({ shades: shades || [] });
+  } catch (err) {
+    console.error('[smarthome] failed to load shades:', err.message);
+    res.status(500).json({ error: 'Could not load shade status.' });
   }
 });

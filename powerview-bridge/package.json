@@ -1,0 +1,16 @@
+{
+  "name": "powerview-bridge",
+  "version": "0.1.0",
+  "description": "Runs on a Raspberry Pi on the home network. Polls a PowerView Gen 3 hub's local API and pushes shade status into Supabase, so the main Benny app (hosted on Vercel, which can't reach the hub directly) can display it.",
+  "type": "module",
+  "main": "poll.js",
+  "scripts": {
+    "start": "node poll.js",
+    "discover": "node poll.js --discover",
+    "once": "node poll.js --once"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^16.4.5"
+  }
+}

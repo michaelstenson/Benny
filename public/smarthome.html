@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/theme.css" />
 </head>
 <body class="hl-page min-h-screen flex items-center justify-center p-6">
-  <main class="hl-card max-w-lg w-full p-8">
+  <main class="hl-card max-w-xl w-full p-8">
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
         <div class="hl-logo">
@@ -38,9 +38,11 @@
     <!-- Shown once we have thermostat data -->
     <ul id="thermostats" class="hidden hl-divide"></ul>
 
-    <p class="hl-muted text-xs mt-6">
-      Read-only for now — this just shows current status. Shades aren't
-      here yet; see README "Stage 8" for why.
+    <h2 class="hl-label mt-8 mb-2">Shades</h2>
+    <ul id="shades" class="hidden hl-divide"></ul>
+    <p id="shades-empty" class="hidden hl-muted text-sm">
+      No shades reported yet — the Raspberry Pi bridge isn't running, or
+      hasn't polled successfully yet. See README "Stage 8" for setup.
     </p>
   </main>
 

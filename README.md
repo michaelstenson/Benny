@@ -41,7 +41,7 @@ benny/
 │       ├── bills.js       # /api/bills (GET/POST) — includes the per-category summary
 │       ├── comps.js       # /api/comps (GET) + /api/comps/refresh (GET, cron-only)
 │       ├── resideoAuth.js # /auth/resideo + /auth/resideo/callback — the Resideo sign-in handshake
-│       └── smarthome.js   # /api/smarthome/status + /api/smarthome/thermostats
+│       └── smarthome.js   # /api/smarthome/status, /thermostats (GET+PATCH), /shades
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
 │   ├── app.js              # browser-side JS that calls /api/hello
@@ -54,7 +54,9 @@ benny/
 │   ├── comps.html          # the home comps page
 │   ├── comps.js            # browser-side JS that renders the estimate + comps table
 │   ├── smarthome.html      # the smart home page
-│   └── smarthome.js        # browser-side JS that renders thermostat status
+│   └── smarthome.js        # browser-side JS: thermostat status/control + shade status
+├── powerview-bridge/        # standalone script that runs on a Raspberry Pi at home,
+│                             # not part of the Vercel app — see its own README.md
 ├── .env.example            # template for required environment variables
 ├── .env                     # your real values (never committed — see .gitignore)
 ├── vercel.json              # tells Vercel explicitly how to build/route the app
@@ -295,13 +297,19 @@ doesn't support searching by address/radius directly — it would mean joining P
 three separate datasets (sales, property characteristics, address lookup). That's a lot of added
 complexity for what the single RentCast call already covers well. Worth revisiting later.
 
-## Stage 8: Smart home awareness — thermostat status (read-only)
+## Stage 8: Smart home awareness
 
-Adds a `/smarthome.html` page showing each thermostat's current indoor
-temperature, mode (heat/cool/auto), and setpoint, pulled live from your
-Resideo (Honeywell Home) account. This is the first slice of "smart home
-awareness" — no control, no shades yet, no automation logic. Just proving
-the connection, the same spirit as Stage 1's hello-world.
+Adds a `/smarthome.html` page showing live thermostat status and
+control (Resideo), plus shade status pushed in from a Raspberry Pi on
+the home network (PowerView). Built in three slices — 8a proved the
+Resideo connection read-only, 8b added control, 8c added shades.
+
+### 8a: Thermostat status (read-only)
+
+Shows each thermostat's current indoor temperature, mode
+(heat/cool/auto), and setpoint, pulled live from your Resideo
+(Honeywell Home) account. The first slice of "smart home awareness" —
+just proving the connection, the same spirit as Stage 1's hello-world.
 
 **How it works:** `server/lib/resideoClient.js` talks to Resideo's REST
 API directly with `fetch()` (there's no SDK like `googleapis` for this
@@ -341,19 +349,71 @@ works against a real Resideo thermostat already on your account. Like
 Google, the production `RESIDEO_REDIRECT_URI` needs to point at the live
 domain once deployed, added as an environment variable in Vercel.
 
-**Scoped out of this stage, on purpose:**
-- **PowerView shades** — Hunter-Douglas's hub only exposes its API on
-  your home's local network, which a Vercel-hosted app has no way to
-  reach directly (unlike Resideo, which is a real cloud API). Adding
-  shades needs either an always-on device at home running a small poller
-  that pushes status into Supabase (same shape as the RentCast weekly
-  cron, just triggered from home instead of Vercel), or accepting that
-  shade status only works for local/self-hosted runs. Also still
-  depends on which PowerView hub generation you have — Gen 3 uses
-  Bluetooth LE and doesn't have the mature local-API story older
-  PowerView hubs do.
-- **Any control** (changing the setpoint, moving a shade) — read-only
-  only, same as Stage 2's calendar.
+### 8b: Thermostat control
+
+Adds mode (Off/Heat/Cool/Auto) and setpoint control to the same page —
+`PATCH /api/smarthome/thermostats/:deviceId`, body
+`{ locationId, mode?, heatSetpoint?, coolSetpoint? }`.
+
+**A real gotcha:** Resideo's control endpoint takes a full
+`changeableValues` object on every write and replaces it wholesale —
+sending just `{ heatSetpoint: 70 }` risks the API rejecting the request
+or dropping fields you didn't mean to touch (`autoChangeoverActive`,
+etc.). So the route does a read-modify-write: `fetchThermostat()` pulls
+the device's current `changeableValues` fresh (not whatever the browser
+last saw, which could be stale), merges in only the field(s) actually
+changing, then submits the merged object. Auto mode needs both
+`heatSetpoint` and `coolSetpoint` together, which is why the frontend
+shows two setpoint fields only when Auto is selected.
+
+### 8c: PowerView shades, via a Raspberry Pi bridge
+
+Adds a "Shades" section to the same page, showing each shade's position,
+tilt (if applicable), and battery status. Unlike the thermostat, this
+page never talks to the shade hub directly — Hunter Douglas's PowerView
+hub only exposes its API on the home's local network, which a
+Vercel-hosted app has no way to reach (unlike Resideo, which is a real
+cloud API). Instead, a small Node script in `powerview-bridge/` runs on
+a Raspberry Pi on the home network, polls the hub, and pushes shade
+status into a new Supabase table, `powerview_shades` — the exact same
+shape as the RentCast weekly comps cron, just triggered from a device at
+home instead of a Vercel cron job. `GET /api/smarthome/shades` just
+reads whatever the Pi last wrote.
+
+**Status:** the Pi bridge's hub client was written before a real Gen 3
+hub was available to test against — PowerView's Gen 3 local API isn't
+officially documented, so the endpoint paths and response shape in
+`powerview-bridge/hubClient.js` are a best guess from community
+reverse-engineering, not confirmed. `powerview-bridge/README.md` has a
+`npm run discover` step specifically for verifying (and fixing, if
+needed) that guess against the real hub once it's reachable.
+
+**Data model:**
+```sql
+create table powerview_shades (
+  id text primary key,
+  name text not null,
+  room_name text,
+  primary_position integer,
+  tilt_position integer,
+  battery_status text,
+  updated_at timestamptz not null default now()
+);
+```
+No RLS — same as `chores`/`home_value_estimates`/`home_comps`: it's
+device status, not credentials, and only this app's own server and the
+Pi bridge (both holding the key privately) ever touch it.
+
+**Setup:** see `powerview-bridge/README.md` for the full walkthrough
+(finding the hub's address, installing Node on the Pi, the discovery
+step, and running it long-term via systemd).
+
+**Scoped out, on purpose:**
+- **Shade control** (moving a shade from the app) — the Pi → Supabase
+  → app path above is one-way (status only). Controlling a shade would
+  need a command channel back to the Pi (e.g. a small command queue
+  table it polls), which is meaningfully more infrastructure and isn't
+  built yet.
 - **Any automation/decision-making** — this stage doesn't reason about
   anything; it just displays current state.
 
@@ -439,4 +499,4 @@ GitHub repo.
 7. ✅ Home sale comps tracker — confirmed working live (RentCast free tier)
 8. ✅ Visual redesign — "Harbor Lights" direction chosen and implemented (dark, neon edge-glow, family-color accents), shared across every page via `public/theme.css`
 9. Pet vet visit / treatment / food scheduling
-10. ⏳ Smart home awareness — thermostat status (Resideo) done and read-only; PowerView shades blocked on hub generation + finding an always-on device at home to bridge the local hub API to the cloud app (see Stage 8 above)
+10. ⏳ Smart home awareness — Resideo thermostat status + control done; PowerView shades bridge (Raspberry Pi + `powerview-bridge/`) built but unverified against real Gen 3 hardware — needs the `npm run discover` step once the Pi is set up (see Stage 8 above)
