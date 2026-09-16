@@ -1,5 +1,8 @@
 import { Router } from 'express';
-import { supabase } from '../lib/supabaseClient.js';
+// Uses supabaseAdmin, not the anon-key `supabase` client — chores now has
+// RLS enabled with no public policies (same treatment as google_tokens),
+// so only trusted server code with the service_role key can touch it.
+import { supabaseAdmin } from '../lib/supabaseClient.js';
 import { parseChoreText } from '../lib/choreParser.js';
 
 export const choresRouter = Router();
@@ -7,7 +10,7 @@ export const choresRouter = Router();
 // GET /api/chores — everything, incomplete chores first (soonest due
 // date first within that), completed ones last.
 choresRouter.get('/chores', async (req, res) => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('chores')
     .select('*')
     .order('completed', { ascending: true })
@@ -32,7 +35,7 @@ choresRouter.post('/chores', async (req, res) => {
   try {
     const parsed = await parseChoreText(text.trim());
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('chores')
       .insert({
         title: parsed.title,
@@ -62,7 +65,7 @@ choresRouter.patch('/chores/:id', async (req, res) => {
     return res.status(400).json({ error: '"completed" must be true or false.' });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('chores')
     .update({ completed })
     .eq('id', id)

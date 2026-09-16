@@ -1,5 +1,11 @@
 import { Router } from 'express';
-import { supabase } from '../lib/supabaseClient.js';
+// Uses supabaseAdmin, not the anon-key `supabase` client — home_value_estimates
+// and home_comps now have RLS enabled with no public policies (same
+// treatment as google_tokens), so only trusted server code with the
+// service_role key can touch them. This route is also the only place the
+// weekly cron job's Authorization header check (below) actually matters,
+// since the tables it writes to are no longer reachable any other way.
+import { supabaseAdmin } from '../lib/supabaseClient.js';
 import { fetchHomeValueEstimate } from '../lib/rentcastClient.js';
 import { generateCompsSummary } from '../lib/compsSummary.js';
 
@@ -10,7 +16,7 @@ export const compsRouter = Router();
 // page calls; it never talks to RentCast directly (only the weekly refresh
 // job does that, to stay well within RentCast's free-tier request limit).
 compsRouter.get('/comps', async (req, res) => {
-  const { data: estimate, error: estimateError } = await supabase
+  const { data: estimate, error: estimateError } = await supabaseAdmin
     .from('home_value_estimates')
     .select('*')
     .order('pulled_at', { ascending: false })
@@ -26,7 +32,7 @@ compsRouter.get('/comps', async (req, res) => {
     return res.json({ estimate: null, comps: [], history: [] });
   }
 
-  const { data: comps, error: compsError } = await supabase
+  const { data: comps, error: compsError } = await supabaseAdmin
     .from('home_comps')
     .select('*')
     .eq('estimate_id', estimate.id)
@@ -38,7 +44,7 @@ compsRouter.get('/comps', async (req, res) => {
   }
 
   // A short history of past estimates, for a simple trend line on the page.
-  const { data: history, error: historyError } = await supabase
+  const { data: history, error: historyError } = await supabaseAdmin
     .from('home_value_estimates')
     .select('pulled_at, estimated_price, price_range_low, price_range_high')
     .order('pulled_at', { ascending: true })
@@ -74,7 +80,7 @@ compsRouter.get('/comps/refresh', async (req, res) => {
     if (!req.query.force) {
       const startOfToday = new Date();
       startOfToday.setUTCHours(0, 0, 0, 0);
-      const { data: existing, error: existingError } = await supabase
+      const { data: existing, error: existingError } = await supabaseAdmin
         .from('home_value_estimates')
         .select('id')
         .gte('pulled_at', startOfToday.toISOString())
@@ -89,7 +95,7 @@ compsRouter.get('/comps/refresh', async (req, res) => {
 
     const rentcastData = await fetchHomeValueEstimate();
 
-    const { data: previousEstimate } = await supabase
+    const { data: previousEstimate } = await supabaseAdmin
       .from('home_value_estimates')
       .select('estimated_price')
       .order('pulled_at', { ascending: false })
@@ -129,7 +135,7 @@ compsRouter.get('/comps/refresh', async (req, res) => {
       previousEstimate,
     });
 
-    const { data: insertedEstimate, error: insertEstimateError } = await supabase
+    const { data: insertedEstimate, error: insertEstimateError } = await supabaseAdmin
       .from('home_value_estimates')
       .insert({
         estimated_price: rentcastData.price,
@@ -144,7 +150,7 @@ compsRouter.get('/comps/refresh', async (req, res) => {
     if (insertEstimateError) throw insertEstimateError;
 
     if (comps.length > 0) {
-      const { error: insertCompsError } = await supabase
+      const { error: insertCompsError } = await supabaseAdmin
         .from('home_comps')
         .insert(comps.map((c) => ({ ...c, estimate_id: insertedEstimate.id })));
       if (insertCompsError) throw insertCompsError;

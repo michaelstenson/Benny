@@ -189,12 +189,20 @@ from your regular Claude.ai chat login — the API bills per use (pay-as-you-go)
 not through a Claude subscription. You'll likely need to add a small amount
 of credit/billing there before requests succeed.
 
-A design choice worth noting: unlike `google_tokens`, the `chores` table
-does **not** have Row Level Security enabled. It doesn't hold credentials —
-just household task text — and only our own server ever touches it, so the
-extra lockdown wasn't worth the complexity here. `google_tokens` earns RLS
-because a leaked OAuth token is a real problem; a leaked "water the plants"
-is not.
+**Update (Stage 8, security pass):** `chores` originally shipped without
+Row Level Security, on the reasoning that it doesn't hold credentials and
+only our own server touches it anyway. That reasoning was true of the
+*code*, but not enforced at the *database* level — RLS off means the
+`anon` key (the one this app was already using for these tables) can
+read and write the table directly against Supabase, completely bypassing
+the app. Supabase's own security advisor flagged this, so `chores`,
+`bills`, `home_value_estimates`, and `home_comps` all now have RLS
+enabled with no public policies — same treatment as `google_tokens` and
+`resideo_tokens` — and their routes (`chores.js`, `bills.js`, `comps.js`)
+were switched from the anon `supabase` client to `supabaseAdmin`
+(service_role), which bypasses RLS for trusted server code. Net effect:
+zero behavior change for the app itself, but the anon key can no longer
+touch any of these tables directly.
 
 Worth noting: since every chore already has an `assignee` (Michael or Mer),
 this single feature effectively covers "mutual to-do assignment" from the

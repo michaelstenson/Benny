@@ -1,5 +1,8 @@
 import { Router } from 'express';
-import { supabase } from '../lib/supabaseClient.js';
+// Uses supabaseAdmin, not the anon-key `supabase` client — bills now has
+// RLS enabled with no public policies (same treatment as google_tokens),
+// so only trusted server code with the service_role key can touch it.
+import { supabaseAdmin } from '../lib/supabaseClient.js';
 import { parseBillText } from '../lib/billParser.js';
 
 export const billsRouter = Router();
@@ -33,7 +36,7 @@ function summarizeByCategory(bills) {
 
 // GET /api/bills — full history (newest first) plus the per-category summary.
 billsRouter.get('/bills', async (req, res) => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('bills')
     .select('*')
     .order('billing_month', { ascending: false })
@@ -57,7 +60,7 @@ billsRouter.post('/bills', async (req, res) => {
   try {
     const parsed = await parseBillText(text.trim());
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('bills')
       .insert({
         category: parsed.category,
