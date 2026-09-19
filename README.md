@@ -425,6 +425,42 @@ step, and running it long-term via systemd).
 - **Any automation/decision-making** — this stage doesn't reason about
   anything; it just displays current state.
 
+## Stage 9: AI advice generator
+
+Adds an `/advice.html` page: ask Benny any predictive or yes/no-ish
+question and it answers in character — part magic eight ball, part Great
+British Bake Off contestant. Every answer comes back as three parts: a
+short, confident-sounding **verdict**, a themed **haiku**, and a completely
+unrelated **egg-wash aside** ("this will all go better with an egg wash" —
+no logical connection to the question required, that's the point).
+
+**How it works:** `server/lib/adviceGenerator.js` uses the same Claude
+tool-use pattern as `choreParser.js`/`billParser.js` — a strict schema
+(`{ verdict, haiku, egg_wash_advice }`) rather than one blob of text to
+parse, so the frontend can style each part differently. Unlike the
+extraction-style prompts in those files, this one asks for creative
+output, so `temperature` is turned up to `1` for more variety between
+asks. Same model as everywhere else in the app (`FAST_EXTRACTION_MODEL`,
+Haiku) — no reason to pay for a bigger model for a novelty feature.
+`server/routes/advice.js` is a single `POST /api/advice` route.
+
+**No new setup needed** — this reuses the existing `ANTHROPIC_API_KEY`
+from Stage 3. No new Supabase table either: answers aren't persisted,
+this is meant to be a fun one-shot, not a record to keep.
+
+**The loading state:** while Claude is thinking, three small penguins (in
+the family colors) do a CSS keyframe waddle instead of a generic spinner
+— `.hl-penguin`/`.hl-waddle` in `public/theme.css`.
+
+**Scoped out of v1, on purpose:**
+- **No history/"hall of fame" of past answers** — would need a new table;
+  worth adding later if this gets used a lot.
+- **No topic filtering beyond the system prompt** — the prompt tells
+  Claude to keep serious topics (health/financial/legal/safety) playfully
+  noncommittal rather than actually answering them, but there's no hard
+  keyword block list. Fine for a 2-person household app; would need
+  revisiting if this were ever public-facing.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-quincy5.vercel.app** — Vercel is
@@ -508,3 +544,28 @@ GitHub repo.
 8. ✅ Visual redesign — "Harbor Lights" direction chosen and implemented (dark, neon edge-glow, family-color accents), shared across every page via `public/theme.css`
 9. Pet vet visit / treatment / food scheduling
 10. ⏳ Smart home awareness — Resideo thermostat status + control done; PowerView shades bridge (Raspberry Pi + `powerview-bridge/`) built but unverified against real Gen 3 hardware — needs the `npm run discover` step once the Pi is set up (see Stage 8 above)
+11. ✅ AI advice generator — magic eight ball verdict + haiku + egg-wash twist, dancing penguin loading state (see Stage 9 above)
+
+## Future feature ideas (unscheduled)
+
+Not sequenced yet — captured here so they don't get lost. See conversation
+notes for a fuller breakdown of steps/UX for each.
+
+12. 💡 Google Calendar write access — let Benny create events (starting
+    with natural-language input, reusing the chores/bills Claude
+    tool-use pattern), not just read them. Needs a broader OAuth scope
+    and re-consent from both Michael and Mer.
+13. 💡 Smart home controls, expanded — lighting, laundry, range hood,
+    garage, Litter-Robot, and PowerView shade *control* (today's bridge
+    is status-only), including sorting out the multi-generational
+    Hunter Douglas hub situation
+14. 💡 An autonomous planning agent for the Netherlands move (~Sept
+    2027) — Dutch language study, professional networking in NL,
+    relocation logistics — connected to Gmail and able to help schedule
+    appointments. The most sensitive item here: needs careful, narrow
+    Gmail scoping (Benny explicitly does not have Gmail access today —
+    see Stage 2 above)
+15. 💡 Calendar ↔ chores coordination — a daily/weekly digest that
+    cross-references upcoming calendar events with open chores/to-dos
+    for shared awareness, rather than treating them as two separate
+    lists
