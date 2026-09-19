@@ -512,9 +512,19 @@ path, and `chores`).
 
 ## Deploying to Vercel
 
-Benny is deployed at **https://benny-quincy5.vercel.app** — Vercel is
+Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
 connected directly to this GitHub repo, so every `git push` to `main`
 automatically triggers a new deployment. No separate "deploy" step needed.
+
+> **A URL correction, found the hard way:** this README used to point at
+> `benny-quincy5.vercel.app`. That domain isn't actually connected to this
+> repo or this Vercel account at all — it's a separate, orphaned deployment
+> (frozen on a very old build) that just happened to still be reachable.
+> Every real push has always gone to the Vercel project behind
+> `benny-xi.vercel.app` / `benny-penguin-palace.vercel.app` (same project,
+> multiple aliases) instead. If a link to the old domain turns up anywhere
+> else (bookmarks, Google Cloud Console's authorized domains, texts to each
+> other), it needs updating too — it will not reflect new pushes.
 
 **What had to change to make this work:** the first two deploy attempts
 "succeeded" in well under a second each and produced a site with nothing
