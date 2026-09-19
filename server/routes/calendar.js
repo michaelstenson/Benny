@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { google } from 'googleapis';
 import { createOAuthClient } from '../lib/googleClient.js';
-import { loadTokens, saveTokens, OWNERS } from '../lib/tokenStore.js';
+import { loadTokens, saveTokens, clearTokens, OWNERS } from '../lib/tokenStore.js';
 
 export const calendarRouter = Router();
 
@@ -47,13 +47,33 @@ export async function fetchEventsForOwner(owner, { maxResults = 20 } = {}) {
   });
 
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-  const { data } = await calendar.events.list({
-    calendarId: 'primary',
-    timeMin: new Date().toISOString(),
-    maxResults,
-    singleEvents: true, // expands recurring events (e.g. weekly meetings) into individual instances
-    orderBy: 'startTime',
-  });
+  let data;
+  try {
+    ({ data } = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: new Date().toISOString(),
+      maxResults,
+      singleEvents: true, // expands recurring events (e.g. weekly meetings) into individual instances
+      orderBy: 'startTime',
+    }));
+  } catch (err) {
+    // "invalid_grant" means the refresh_token itself is dead (revoked, or
+    // — if the OAuth consent screen is still in "Testing" publishing
+    // status in Google Cloud Console — expired after 7 days), not just
+    // that the access token needs refreshing. That case is unrecoverable
+    // without a real reconnect, so clear the stored tokens rather than
+    // leaving a permanently-broken row behind: that's what makes the
+    // "Connect ___'s calendar" button on /calendar.html come back instead
+    // of this failing the same way forever.
+    if (String(err.message).includes('invalid_grant')) {
+      await clearTokens(owner).catch((clearErr) =>
+        console.error(`[calendar] failed to clear dead tokens for ${owner}:`, clearErr.message)
+      );
+      console.error(`[calendar] ${owner}'s refresh token is dead — cleared, reconnect needed.`);
+      return [];
+    }
+    throw err;
+  }
 
   return (data.items || []).map((event) => ({
     id: `${owner}:${event.id}`,

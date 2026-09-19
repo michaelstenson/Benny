@@ -62,3 +62,17 @@ export async function saveTokens(ownerId, tokens) {
   const { error } = await admin.from('google_tokens').upsert(merged);
   if (error) throw error;
 }
+
+// Deletes a person's stored tokens outright — used when Google tells us a
+// refresh_token is actually dead (e.g. "invalid_grant"), rather than just
+// expired-and-refreshable. Deleting the row (instead of saving nulls,
+// which saveTokens' merge logic would just fall back on anyway) is what
+// makes loadTokens() report this person as disconnected again, so the
+// "Connect ___'s calendar" button on /calendar.html naturally reappears
+// instead of failing silently forever.
+export async function clearTokens(ownerId) {
+  requireValidOwner(ownerId);
+  const admin = requireAdminClient();
+  const { error } = await admin.from('google_tokens').delete().eq('id', ownerId);
+  if (error) throw error;
+}
