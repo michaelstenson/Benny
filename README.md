@@ -461,6 +461,55 @@ the family colors) do a CSS keyframe waddle instead of a generic spinner
   keyword block list. Fine for a 2-person household app; would need
   revisiting if this were ever public-facing.
 
+## Stage 10: Calendar ↔ chores digest
+
+Adds a "Today" section to the homepage: a merged, at-a-glance view of
+today's calendar events (both owners) and today's due-or-overdue open
+chores — so the two lists that used to live on separate pages (`/calendar.html`,
+`/chores.html`) finally answer "what's actually on my plate today" as one
+glance instead of two page visits.
+
+**How it works:** `GET /api/digest` (`server/routes/digest.js`) does pure
+data-joining, no Claude involved — unlike chores/bills/advice, there's
+nothing here for a language model to extract or generate. It reuses
+`fetchEventsForOwner()` from `calendar.js` (now exported, and given a
+`maxResults` option) rather than duplicating the Google Calendar call,
+and a plain Supabase query — `completed = false AND due_date <= today` —
+for chores, which naturally also picks up anything overdue (and just as
+naturally excludes chores with no due date at all, since `NULL <= anything`
+is never true in Postgres).
+
+**A real gotcha:** the household is in Chicago, but Vercel runs
+serverless functions in UTC — computing "today" from the server's own
+clock would flip the digest over to tomorrow several hours before it
+actually is locally. `localDateString()` in `digest.js` pins "today" to
+`America/Chicago` explicitly (`Intl`/`toLocaleDateString`, no date
+library needed) rather than trusting the server's own timezone.
+
+**Another one, found while testing this locally:** a broken or expired
+Google connection (an `invalid_grant` from a stale refresh token, in this
+case) used to take down the *entire* digest, chores included, even
+though chores have nothing to do with Google. Fixed by catching each
+owner's calendar fetch independently inside `digest.js` and treating a
+failed fetch the same way `fetchEventsForOwner()` already treats "not
+connected yet" — contributes zero events, doesn't block the chores half.
+This is specifically about the digest's own resilience; it does not fix
+whatever is actually wrong with the stored Google token (see `/calendar.html`
+if that page is also showing a calendar error — reconnecting there is the
+real fix).
+
+**No new setup, no new table** — reads from the two things Benny can
+already see (`google_tokens` indirectly, via the existing calendar code
+path, and `chores`).
+
+**Scoped out of v1, on purpose:**
+- **Chores/events beyond today** — no "this week" view yet; today-only
+  keeps this a glance, not a second calendar page.
+- **No notifications** — this is a widget you see when you open Benny,
+  not a ping that reaches you elsewhere. An email/push digest was
+  considered but deferred until it's clear the homepage widget alone
+  isn't enough.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-quincy5.vercel.app** — Vercel is
@@ -545,27 +594,26 @@ GitHub repo.
 9. Pet vet visit / treatment / food scheduling
 10. ⏳ Smart home awareness — Resideo thermostat status + control done; PowerView shades bridge (Raspberry Pi + `powerview-bridge/`) built but unverified against real Gen 3 hardware — needs the `npm run discover` step once the Pi is set up (see Stage 8 above)
 11. ✅ AI advice generator — magic eight ball verdict + haiku + egg-wash twist, dancing penguin loading state (see Stage 9 above)
+12. ✅ Calendar ↔ chores digest — merged "Today" view on the homepage (see Stage 10 above)
 
 ## Future feature ideas (unscheduled)
 
 Not sequenced yet — captured here so they don't get lost. See conversation
 notes for a fuller breakdown of steps/UX for each.
 
-12. 💡 Google Calendar write access — let Benny create events (starting
+13. 💡 Google Calendar write access — let Benny create events (starting
     with natural-language input, reusing the chores/bills Claude
     tool-use pattern), not just read them. Needs a broader OAuth scope
     and re-consent from both Michael and Mer.
-13. 💡 Smart home controls, expanded — lighting, laundry, range hood,
+14. 💡 Smart home controls, expanded — lighting, laundry, range hood,
     garage, Litter-Robot, and PowerView shade *control* (today's bridge
     is status-only), including sorting out the multi-generational
-    Hunter Douglas hub situation
-14. 💡 An autonomous planning agent for the Netherlands move (~Sept
+    Hunter Douglas hub situation. Waiting on a device inventory before
+    this can be turned into an integration plan.
+15. 💡 An autonomous planning agent for the Netherlands move (~Sept
     2027) — Dutch language study, professional networking in NL,
     relocation logistics — connected to Gmail and able to help schedule
     appointments. The most sensitive item here: needs careful, narrow
     Gmail scoping (Benny explicitly does not have Gmail access today —
-    see Stage 2 above)
-15. 💡 Calendar ↔ chores coordination — a daily/weekly digest that
-    cross-references upcoming calendar events with open chores/to-dos
-    for shared awareness, rather than treating them as two separate
-    lists
+    see Stage 2 above). Sequenced after #13 (calendar write) and the
+    now-built digest, since it leans on both.

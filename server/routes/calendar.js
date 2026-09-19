@@ -23,12 +23,13 @@ calendarRouter.get('/calendar/status', async (req, res) => {
   }
 });
 
-// Fetches the next 20 upcoming events for one person and tags each with
-// `owner` so the merged list (below) can still tell them apart. Returns
+// Fetches the next `maxResults` upcoming events for one person and tags
+// each with `owner` so a merged list can still tell them apart. Returns
 // an empty array — not an error — for someone who hasn't connected yet,
 // since "no events from them" and "not connected" both just mean this
-// person contributes nothing to the merged list.
-async function fetchEventsForOwner(owner) {
+// person contributes nothing to the merged list. Exported so digest.js
+// can reuse the same fetch instead of duplicating the Google API call.
+export async function fetchEventsForOwner(owner, { maxResults = 20 } = {}) {
   const tokens = await loadTokens(owner);
   if (!tokens?.refresh_token) return [];
 
@@ -49,7 +50,7 @@ async function fetchEventsForOwner(owner) {
   const { data } = await calendar.events.list({
     calendarId: 'primary',
     timeMin: new Date().toISOString(),
-    maxResults: 20,
+    maxResults,
     singleEvents: true, // expands recurring events (e.g. weekly meetings) into individual instances
     orderBy: 'startTime',
   });
@@ -71,7 +72,7 @@ async function fetchEventsForOwner(owner) {
 // this only ever 401s if NEITHER person is connected yet.
 calendarRouter.get('/calendar/events', async (req, res) => {
   try {
-    const perOwner = await Promise.all(OWNERS.map(fetchEventsForOwner));
+    const perOwner = await Promise.all(OWNERS.map((owner) => fetchEventsForOwner(owner)));
     const anyConnected = await Promise.all(OWNERS.map((owner) => loadTokens(owner)));
     if (!anyConnected.some((tokens) => tokens?.refresh_token)) {
       return res.status(401).json({ error: 'Google Calendar is not connected yet.' });

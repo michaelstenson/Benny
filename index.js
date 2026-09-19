@@ -23,6 +23,7 @@ import { compsRouter } from './server/routes/comps.js';
 import { resideoAuthRouter } from './server/routes/resideoAuth.js';
 import { smarthomeRouter } from './server/routes/smarthome.js';
 import { adviceRouter } from './server/routes/advice.js';
+import { digestRouter } from './server/routes/digest.js';
 
 // __dirname doesn't exist in ES modules by default, so we rebuild it —
 // this is the standard way to do it in a "type": "module" project.
@@ -54,6 +55,7 @@ app.use('/api', billsRouter);
 app.use('/api', compsRouter);
 app.use('/api', smarthomeRouter);
 app.use('/api', adviceRouter);
+app.use('/api', digestRouter);
 
 // The Google/Resideo sign-in handshakes live under /auth instead of /api,
 // since they're browser redirect flows, not JSON endpoints.
