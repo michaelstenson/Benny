@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Benny — Privacy Policy</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Nunito:wght@400;600;700&display=swap">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/theme.css" />
+</head>
+<body class="hl-page min-h-screen flex items-center justify-center p-6">
+  <main class="hl-card max-w-2xl w-full p-8">
+    <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-3">
+        <div class="hl-logo">
+          <svg width="20" height="24" viewBox="0 0 100 122" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M76 46C90 52 94 66 90 78C82 74 72 66 68 56L76 46Z" fill="#F4ECD8"/>
+            <path d="M50 8C66 8 76 26 76 46V96C76 110 64 118 50 118C36 118 24 110 24 96V46C24 26 34 8 50 8Z" fill="#F4ECD8"/>
+            <path d="M50 30C58 30 62 42 62 54V100C62 108 57 112 50 112C43 112 38 108 38 100V54C38 42 42 30 50 30Z" fill="#211F2B"/>
+            <path d="M67 13L98 23L67 33Z" fill="#F2C879"/>
+            <circle cx="59" cy="18" r="3.4" fill="#211F2B"/>
+            <ellipse cx="40" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
+            <ellipse cx="60" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
+          </svg>
+        </div>
+        <h1 class="hl-h1">Privacy Policy</h1>
+      </div>
+      <a href="/" class="hl-back">← home</a>
+    </div>
+
+    <p class="hl-subtitle mb-6">Last updated September 19, 2026</p>
+
+    <div class="space-y-6 text-sm hl-dim leading-relaxed">
+      <p>
+        Benny is a private household assistant built for exactly two people —
+        Michael and Mer — to run a shared calendar, chores, bills, and home
+        status. It is not a public product, has no other users, and is not
+        offered or advertised to anyone outside this household.
+      </p>
+
+      <div>
+        <p class="hl-label mb-2">What Benny accesses, and why</p>
+        <ul class="list-disc list-inside space-y-1">
+          <li><strong class="hl-text">Google Calendar</strong> — read (and, if enabled, create/edit) events on Michael's and Mer's own calendars, solely to display and manage the shared household calendar inside Benny.</li>
+          <li><strong class="hl-text">Resideo (Honeywell Home) thermostat data</strong> — read and control the household thermostat.</li>
+          <li><strong class="hl-text">PowerView smart shade status</strong> — read shade position/battery status from a bridge running on the home network.</li>
+          <li><strong class="hl-text">Household data you enter directly</strong> — chores, bills, and similar entries typed into Benny.</li>
+        </ul>
+      </div>
+
+      <div>
+        <p class="hl-label mb-2">What Benny does not do</p>
+        <ul class="list-disc list-inside space-y-1">
+          <li>Does not access Gmail or any email account.</li>
+          <li>Does not sell, rent, or share this data with advertisers or data brokers.</li>
+          <li>Does not use this data for advertising or third-party analytics.</li>
+          <li>Is not accessible to anyone other than Michael and Mer.</li>
+        </ul>
+      </div>
+
+      <div>
+        <p class="hl-label mb-2">Where data is stored</p>
+        <p>
+          Household data and connection tokens are stored in a private Supabase
+          database used only by this app. Rows holding credentials (like Google
+          and Resideo tokens) have Row Level Security enabled with no public
+          access policies, so only Benny's own trusted server code can read or
+          write them — not even Benny's own browser-facing key can reach them
+          directly.
+        </p>
+      </div>
+
+      <div>
+        <p class="hl-label mb-2">Other services Benny talks to</p>
+        <p>
+          Some features send relevant data to a service that performs that
+          specific feature — for example, a typed sentence like "remind Mer to
+          water the plants Thursday" is sent to Anthropic's Claude API to turn
+          it into a structured chore, and home address/property details are
+          sent to RentCast to look up nearby sale comps. Each of these only
+          receives what that specific feature needs, and only to perform it.
+        </p>
+      </div>
+
+      <div>
+        <p class="hl-label mb-2">Revoking access</p>
+        <p>
+          Michael and Mer can each revoke Benny's access to their Google
+          account at any time from their
+          <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google Account permissions page</a>.
+        </p>
+      </div>
+
+      <div>
+        <p class="hl-label mb-2">Questions</p>
+        <p>
+          Contact <a href="mailto:michaelstenson@gmail.com">michaelstenson@gmail.com</a>.
+        </p>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
