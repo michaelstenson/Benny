@@ -510,6 +510,37 @@ path, and `chores`).
   considered but deferred until it's clear the homepage widget alone
   isn't enough.
 
+## Stage 11: Home screen icon
+
+Adds a real "Add to Home Screen" experience on phones: a proper penguin
+icon instead of a generic globe/browser icon, and — when launched from
+the home screen — a standalone window (no browser address bar) themed to
+match Harbor Lights, instead of just a bookmark that reopens Chrome/Safari.
+
+**What was added:**
+- `public/icons/icon-{180,192,512}.png` — the existing penguin mark,
+  rasterized onto a solid `#211f2b` square (Harbor Lights' `--hl-bg-elev`)
+  with generous padding, so Android's circular/squircle mask and iOS's
+  own rounded-corner mask don't clip it. Deliberately *not* pre-rounded —
+  the OS applies its own shape, and a doubly-rounded icon looks wrong.
+- `public/manifest.json` — name, icons, `display: "standalone"`, and
+  `background_color`/`theme_color` matching the app's dark theme.
+- Every page's `<head>` now links the manifest and icons and sets
+  `apple-mobile-web-app-*` meta tags. This has to be on *every* page, not
+  just the homepage — iOS reads these from whichever page is open at the
+  moment someone taps "Add to Home Screen," not from `index.html`
+  specifically, so a page missing them would launch as a plain browser
+  bookmark instead of a themed standalone app.
+
+**How the icons were generated:** the project has no image-processing
+dependency (and didn't need one for this) — the penguin SVG was rendered
+onto an in-browser `<canvas>` at each size and posted to a one-off, since-
+removed dev route that wrote the PNG bytes straight to disk. Avoids both
+adding a native image dependency for a one-time task and hand-copying
+large base64 strings through chat (error-prone at that length).
+
+**Setup:** none — no new environment variables, no new Supabase table.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -602,28 +633,29 @@ GitHub repo.
 7. ✅ Home sale comps tracker — confirmed working live (RentCast free tier)
 8. ✅ Visual redesign — "Harbor Lights" direction chosen and implemented (dark, neon edge-glow, family-color accents), shared across every page via `public/theme.css`
 9. Pet vet visit / treatment / food scheduling
-10. ⏳ Smart home awareness — Resideo thermostat status + control done; PowerView shades bridge (Raspberry Pi + `powerview-bridge/`) built but unverified against real Gen 3 hardware — needs the `npm run discover` step once the Pi is set up (see Stage 8 above)
+10. ⚠️ Smart home awareness — Resideo thermostat status + control code is built (see Stage 8), but currently **non-functional in both prod and local dev**: `RESIDEO_CLIENT_ID`/`RESIDEO_CLIENT_SECRET`/`RESIDEO_REDIRECT_URI` were never set on this Vercel project, and re-registering is currently blocked — the Honeywell/Resideo developer account exists but won't send verification/password-reset emails and refuses fresh signup as "already taken." Try a different email address or network before giving up; may need Resideo support. PowerView shades bridge (Raspberry Pi + `powerview-bridge/`) also still needs the `npm run discover` verification step once the Pi is set up.
 11. ✅ AI advice generator — magic eight ball verdict + haiku + egg-wash twist, dancing penguin loading state (see Stage 9 above)
 12. ✅ Calendar ↔ chores digest — merged "Today" view on the homepage (see Stage 10 above)
+13. ✅ Home screen icon — proper penguin icon + standalone launch on phones (see Stage 11 above)
 
 ## Future feature ideas (unscheduled)
 
 Not sequenced yet — captured here so they don't get lost. See conversation
 notes for a fuller breakdown of steps/UX for each.
 
-13. 💡 Google Calendar write access — let Benny create events (starting
+14. 💡 Google Calendar write access — let Benny create events (starting
     with natural-language input, reusing the chores/bills Claude
     tool-use pattern), not just read them. Needs a broader OAuth scope
     and re-consent from both Michael and Mer.
-14. 💡 Smart home controls, expanded — lighting, laundry, range hood,
+15. 💡 Smart home controls, expanded — lighting, laundry, range hood,
     garage, Litter-Robot, and PowerView shade *control* (today's bridge
     is status-only), including sorting out the multi-generational
     Hunter Douglas hub situation. Waiting on a device inventory before
     this can be turned into an integration plan.
-15. 💡 An autonomous planning agent for the Netherlands move (~Sept
+16. 💡 An autonomous planning agent for the Netherlands move (~Sept
     2027) — Dutch language study, professional networking in NL,
     relocation logistics — connected to Gmail and able to help schedule
     appointments. The most sensitive item here: needs careful, narrow
     Gmail scoping (Benny explicitly does not have Gmail access today —
-    see Stage 2 above). Sequenced after #13 (calendar write) and the
+    see Stage 2 above). Sequenced after #14 (calendar write) and the
     now-built digest, since it leans on both.
