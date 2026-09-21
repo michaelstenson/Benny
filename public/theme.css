@@ -272,6 +272,7 @@ input[type='checkbox'] {
 
 .hl-advice-result { margin-top: 24px; }
 .hl-advice-verdict {
+  margin-top: 16px;
   font-family: 'Baloo 2', 'Nunito', sans-serif;
   font-weight: 700;
   font-size: 22px;

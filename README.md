@@ -427,22 +427,35 @@ step, and running it long-term via systemd).
 
 ## Stage 9: AI advice generator
 
-Adds an `/advice.html` page: ask Benny any predictive or yes/no-ish
-question and it answers in character — part magic eight ball, part Great
-British Bake Off contestant. Every answer comes back as three parts: a
-short, confident-sounding **verdict**, a themed **haiku**, and a completely
-unrelated **egg-wash aside** ("this will all go better with an egg wash" —
-no logical connection to the question required, that's the point).
+Adds an `/advice.html` page: ask Benny any question and it answers with
+two things — genuine, take-it-or-leave-it **guidance** for thinking the
+question through, plus exactly ONE playful aside, chosen at random each
+time: a magic-eight-ball-style **verdict**, a themed **haiku**, or a
+completely unrelated Great British Bake Off-style **egg-wash aside**
+("this will all go better with an egg wash" — no logical connection to
+the question required, that's the point). Originally all three playful
+formats came back at once on every answer; that got noisy fast, so now
+it's one guidance + one surprise per question.
 
 **How it works:** `server/lib/adviceGenerator.js` uses the same Claude
 tool-use pattern as `choreParser.js`/`billParser.js` — a strict schema
-(`{ verdict, haiku, egg_wash_advice }`) rather than one blob of text to
-parse, so the frontend can style each part differently. Unlike the
-extraction-style prompts in those files, this one asks for creative
-output, so `temperature` is turned up to `1` for more variety between
-asks. Same model as everywhere else in the app (`FAST_EXTRACTION_MODEL`,
-Haiku) — no reason to pay for a bigger model for a novelty feature.
-`server/routes/advice.js` is a single `POST /api/advice` route.
+rather than one blob of text to parse. Which playful format gets used is
+decided in plain JS with `Math.random()` *before* the Claude call, not
+left to the model to choose — that's what actually guarantees only one
+shows up, rather than just hoping the model picks one. The tool's
+`playful_reply` field description is built dynamically each call to
+describe only the chosen format, and the schema always includes a
+separate `guidance` field instructed to give real, specific advice for
+reasoning through the question — not a direct answer, and explicitly not
+medical/legal/financial/safety advice — without undercutting it with the
+playful part. Unlike the extraction-style prompts in `choreParser.js`/
+`billParser.js`, this one asks for creative output, so `temperature` is
+turned up to `1` for more variety between asks. Same model as everywhere
+else in the app (`FAST_EXTRACTION_MODEL`, Haiku) — no reason to pay for a
+bigger model for a novelty feature. `server/routes/advice.js` is a single
+`POST /api/advice` route; it just passes the `{ format, guidance, reply }`
+shape through unchanged, so the frontend (`public/advice.js`) is what
+decides which of the three playful elements to show based on `format`.
 
 **No new setup needed** — this reuses the existing `ANTHROPIC_API_KEY`
 from Stage 3. No new Supabase table either: answers aren't persisted,
@@ -702,7 +715,7 @@ GitHub repo.
 8. ✅ Visual redesign — "Harbor Lights" direction chosen and implemented (dark, neon edge-glow, family-color accents), shared across every page via `public/theme.css`
 9. Pet vet visit / treatment / food scheduling
 10. ⚠️ Smart home awareness — Resideo thermostat status + control code is built (see Stage 8), but currently **non-functional in both prod and local dev**: `RESIDEO_CLIENT_ID`/`RESIDEO_CLIENT_SECRET`/`RESIDEO_REDIRECT_URI` were never set on this Vercel project, and re-registering is currently blocked — the Honeywell/Resideo developer account exists but won't send verification/password-reset emails and refuses fresh signup as "already taken." Try a different email address or network before giving up; may need Resideo support. PowerView shades bridge (Raspberry Pi + `powerview-bridge/`) also still needs the `npm run discover` verification step once the Pi is set up — and separately, the `powerview_shades` table it writes to doesn't actually exist in Supabase yet (see Stage 12's note).
-11. ✅ AI advice generator — magic eight ball verdict + haiku + egg-wash twist, dancing penguin loading state (see Stage 9 above)
+11. ✅ AI advice generator — genuine guidance + one random playful aside (fortune-cookie verdict, haiku, or egg-wash twist), dancing penguin loading state (see Stage 9 above)
 12. ✅ Calendar ↔ chores digest — merged "Today" view on the homepage (see Stage 10 above)
 13. ✅ Home screen icon — proper penguin icon + standalone launch on phones (see Stage 11 above)
 14. ⏳ Home Connect (hood + dishwasher) — status only so far (see Stage 12 above); control, and confirming the OAuth scopes/refresh-token behavior against a real registered app, still to come
