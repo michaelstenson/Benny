@@ -541,6 +541,74 @@ large base64 strings through chat (error-prone at that length).
 
 **Setup:** none — no new environment variables, no new Supabase table.
 
+## Stage 12: Home Connect (kitchen appliances, status only)
+
+Adds a "Kitchen appliances" section to the Smart Home page: connection
+status for the Thermador range hood and the Bosch dishwasher. Both run
+through **Home Connect**, BSH's shared platform for Bosch/Siemens/
+Gaggenau/Thermador appliances — one integration covers both, the same
+way one Resideo connection already covers thermostats.
+
+**How it works:** `server/lib/homeConnectClient.js` mirrors
+`resideoClient.js`'s shape closely (no SDK, plain `fetch()`), with two
+real differences from Resideo worth knowing:
+- Home Connect authenticates token requests with `client_id`/
+  `client_secret` as regular POST body fields, not HTTP Basic auth like
+  Resideo.
+- Every API call needs an `Accept: application/vnd.bsh.sdk.v1+json`
+  header — a plain `application/json` Accept header gets rejected, and
+  nothing about the OAuth flow itself hints that this is needed.
+
+`server/lib/homeConnectTokenStore.js` and `server/routes/homeConnectAuth.js`
+follow `resideoTokenStore.js`/`resideoAuth.js` exactly — one household
+row (`id = 'household'`), no per-person `state`. New Supabase table,
+`home_connect_tokens`, same RLS-on/no-public-policies treatment as
+`resideo_tokens`.
+
+**This slice deliberately stops at status, not control** — same
+progression as Stage 8a before Stage 8b added thermostat control. Two
+things aren't nailed down yet and are worth confirming before building
+control on top of them:
+- **OAuth scopes** — `homeConnectClient.js` requests
+  `IdentifyAppliance Hood-Control Hood-Settings Dishwasher-Control
+  Dishwasher-Settings Dishwasher-Monitor`, based on Home Connect's public
+  docs, not verified against a real registered app yet. The authorize
+  call only ever grants whatever subset was selected when the OAuth
+  client was registered at developer.home-connect.com, so this needs a
+  real connection to confirm.
+- **Refresh token rotation** — `homeConnectTokenStore.js` currently
+  assumes Home Connect behaves like Google (keeps the same refresh token
+  across refreshes) rather than like Resideo (issues a new one every
+  time, invalidating the old one). Worth confirming empirically once
+  tokens are actually flowing — get this wrong in the Resideo direction
+  and the stored refresh token would silently go stale.
+
+**A real advantage over Resideo:** Home Connect runs a full simulator at
+`https://simulator.home-connect.com` — set `HOMECONNECT_API_BASE` to it
+to prove the whole OAuth + status flow works *before* testing against
+the real hood and dishwasher. Resideo has no equivalent; this was the
+first slice of "smart home awareness" that could be dry-run without
+real hardware on the line.
+
+**Setup:**
+```
+HOMECONNECT_CLIENT_ID=...
+HOMECONNECT_CLIENT_SECRET=...
+HOMECONNECT_REDIRECT_URI=http://localhost:3000/auth/homeconnect/callback
+```
+Register an app at [developer.home-connect.com](https://developer.home-connect.com)
+to get the client id/secret — same shape as the Resideo registration in
+Stage 8a. Both the hood and dishwasher need to already be paired in the
+Home Connect app itself first; this API only reads appliances that are
+already set up there, it doesn't pair new ones.
+
+**Found while building this, unrelated to Home Connect:** the
+`powerview_shades` table documented in Stage 8c as already created
+doesn't actually exist in Supabase — `/api/smarthome/shades` fails with
+"Could not find the table." The PowerView bridge code and README both
+assume it's there; it needs to actually be created before that part of
+Stage 8c can work. Tracked as an open item, not fixed here.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -633,29 +701,46 @@ GitHub repo.
 7. ✅ Home sale comps tracker — confirmed working live (RentCast free tier)
 8. ✅ Visual redesign — "Harbor Lights" direction chosen and implemented (dark, neon edge-glow, family-color accents), shared across every page via `public/theme.css`
 9. Pet vet visit / treatment / food scheduling
-10. ⚠️ Smart home awareness — Resideo thermostat status + control code is built (see Stage 8), but currently **non-functional in both prod and local dev**: `RESIDEO_CLIENT_ID`/`RESIDEO_CLIENT_SECRET`/`RESIDEO_REDIRECT_URI` were never set on this Vercel project, and re-registering is currently blocked — the Honeywell/Resideo developer account exists but won't send verification/password-reset emails and refuses fresh signup as "already taken." Try a different email address or network before giving up; may need Resideo support. PowerView shades bridge (Raspberry Pi + `powerview-bridge/`) also still needs the `npm run discover` verification step once the Pi is set up.
+10. ⚠️ Smart home awareness — Resideo thermostat status + control code is built (see Stage 8), but currently **non-functional in both prod and local dev**: `RESIDEO_CLIENT_ID`/`RESIDEO_CLIENT_SECRET`/`RESIDEO_REDIRECT_URI` were never set on this Vercel project, and re-registering is currently blocked — the Honeywell/Resideo developer account exists but won't send verification/password-reset emails and refuses fresh signup as "already taken." Try a different email address or network before giving up; may need Resideo support. PowerView shades bridge (Raspberry Pi + `powerview-bridge/`) also still needs the `npm run discover` verification step once the Pi is set up — and separately, the `powerview_shades` table it writes to doesn't actually exist in Supabase yet (see Stage 12's note).
 11. ✅ AI advice generator — magic eight ball verdict + haiku + egg-wash twist, dancing penguin loading state (see Stage 9 above)
 12. ✅ Calendar ↔ chores digest — merged "Today" view on the homepage (see Stage 10 above)
 13. ✅ Home screen icon — proper penguin icon + standalone launch on phones (see Stage 11 above)
+14. ⏳ Home Connect (hood + dishwasher) — status only so far (see Stage 12 above); control, and confirming the OAuth scopes/refresh-token behavior against a real registered app, still to come
 
 ## Future feature ideas (unscheduled)
 
 Not sequenced yet — captured here so they don't get lost. See conversation
 notes for a fuller breakdown of steps/UX for each.
 
-14. 💡 Google Calendar write access — let Benny create events (starting
+15. 💡 Google Calendar write access — let Benny create events (starting
     with natural-language input, reusing the chores/bills Claude
     tool-use pattern), not just read them. Needs a broader OAuth scope
     and re-consent from both Michael and Mer.
-15. 💡 Smart home controls, expanded — lighting, laundry, range hood,
-    garage, Litter-Robot, and PowerView shade *control* (today's bridge
-    is status-only), including sorting out the multi-generational
-    Hunter Douglas hub situation. Waiting on a device inventory before
-    this can be turned into an integration plan.
-16. 💡 An autonomous planning agent for the Netherlands move (~Sept
+16. 💡 Smart home controls, expanded — device inventory done (see
+    conversation notes), broken down by integration path:
+    - **Litter-Robot 4** — Whisker cloud API (community-proven via
+      `pylitterbot`), same difficulty tier as Resideo/Home Connect.
+    - **Philips Hue** — a physical Hue Bridge exists, so this goes
+      through Hue's local Bridge API rather than HomeKit.
+    - **Wemo plugs** (turtle lamp, garage lights) — Wemo's own cloud/app
+      was discontinued by Belkin; the only remaining path is a
+      HomeKit-controller component (new pattern, not built yet), since
+      these are only still working today via local HomeKit control.
+    - **PowerView, 3rd floor (Gen 2 shades)** — blocked on hardware, not
+      software: no hub currently owned for these at all. A Gen 2 Hub is
+      still purchasable new; nothing here is buildable until one's
+      bought, and two separate hubs (Gen 2 + Gen 3) will always be
+      needed for the mixed-generation setup.
+    - **LG ThinQ (laundry)** — no public API, unofficial community
+      libraries only; treat as lower-priority status display, not core.
+    - **Chamberlain myQ (garage door)** — likely blocked; Chamberlain has
+      a long history of actively cutting off third-party access.
+    - **Lutron Caséta bridge** (living room ceiling lights) — parked,
+      it's physically unplugged and was unreliable before that.
+17. 💡 An autonomous planning agent for the Netherlands move (~Sept
     2027) — Dutch language study, professional networking in NL,
     relocation logistics — connected to Gmail and able to help schedule
     appointments. The most sensitive item here: needs careful, narrow
     Gmail scoping (Benny explicitly does not have Gmail access today —
-    see Stage 2 above). Sequenced after #14 (calendar write) and the
+    see Stage 2 above). Sequenced after #15 (calendar write) and the
     now-built digest, since it leans on both.

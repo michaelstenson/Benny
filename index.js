@@ -21,6 +21,7 @@ import { choresRouter } from './server/routes/chores.js';
 import { billsRouter } from './server/routes/bills.js';
 import { compsRouter } from './server/routes/comps.js';
 import { resideoAuthRouter } from './server/routes/resideoAuth.js';
+import { homeConnectAuthRouter } from './server/routes/homeConnectAuth.js';
 import { smarthomeRouter } from './server/routes/smarthome.js';
 import { adviceRouter } from './server/routes/advice.js';
 import { digestRouter } from './server/routes/digest.js';
@@ -61,6 +62,7 @@ app.use('/api', digestRouter);
 // since they're browser redirect flows, not JSON endpoints.
 app.use('/auth', authRouter);
 app.use('/auth', resideoAuthRouter);
+app.use('/auth', homeConnectAuthRouter);
 
 // Only actually start listening on a port when this file is run directly
 // (`node index.js` / `npm run dev`, which is how local dev works). When

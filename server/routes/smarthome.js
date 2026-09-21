@@ -16,6 +16,13 @@ import {
   submitThermostatControl,
 } from '../lib/resideoClient.js';
 import { loadResideoTokens, saveResideoTokens } from '../lib/resideoTokenStore.js';
+import {
+  refreshAccessToken as refreshHomeConnectAccessToken,
+  fetchAppliances,
+  fetchApplianceStatus,
+  summarizeAppliance,
+} from '../lib/homeConnectClient.js';
+import { loadHomeConnectTokens, saveHomeConnectTokens } from '../lib/homeConnectTokenStore.js';
 import { supabase } from '../lib/supabaseClient.js';
 
 export const smarthomeRouter = Router();
@@ -118,5 +125,68 @@ smarthomeRouter.get('/smarthome/shades', async (req, res) => {
   } catch (err) {
     console.error('[smarthome] failed to load shades:', err.message);
     res.status(500).json({ error: 'Could not load shade status.' });
+  }
+});
+
+// Same refresh-if-needed pattern as getValidAccessToken() above, just
+// against the Home Connect token store instead of Resideo's.
+async function getValidHomeConnectAccessToken() {
+  const stored = await loadHomeConnectTokens();
+  if (!stored?.refresh_token) return null;
+
+  const expiresSoon = !stored.expiry_date || Date.now() > stored.expiry_date - 60_000;
+  if (!expiresSoon) return stored.access_token;
+
+  const fresh = await refreshHomeConnectAccessToken(stored.refresh_token);
+  await saveHomeConnectTokens(fresh);
+  return fresh.access_token;
+}
+
+// GET /api/smarthome/homeconnect/status — lets the frontend ask "are the
+// kitchen appliances connected?" without triggering an actual Home
+// Connect API call.
+smarthomeRouter.get('/smarthome/homeconnect/status', async (req, res) => {
+  try {
+    const stored = await loadHomeConnectTokens();
+    res.json({ connected: Boolean(stored?.refresh_token) });
+  } catch (err) {
+    console.error('[smarthome] Home Connect status check failed:', err.message);
+    res.status(500).json({ error: 'Could not check Home Connect connection status.' });
+  }
+});
+
+// GET /api/smarthome/homeconnect/appliances — read-only status for every
+// paired appliance (the Thermador hood, the Bosch dishwasher, and
+// anything else added to the Home Connect app itself). Control (starting
+// a program, changing hood fan speed) is intentionally not built yet —
+// see the README for why this first slice stops at status, same as how
+// Resideo started read-only in Stage 8a before Stage 8b added control.
+smarthomeRouter.get('/smarthome/homeconnect/appliances', async (req, res) => {
+  try {
+    const accessToken = await getValidHomeConnectAccessToken();
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Kitchen appliances are not connected yet.' });
+    }
+
+    const appliances = await fetchAppliances(accessToken);
+    const summaries = await Promise.all(
+      appliances.map(async (appliance) => {
+        try {
+          const status = await fetchApplianceStatus(accessToken, appliance.haId);
+          return summarizeAppliance(appliance, status);
+        } catch (err) {
+          // A disconnected/asleep appliance can fail its own status call
+          // without that being a reason to hide it (or fail the whole
+          // list) — still show it, just without live status fields.
+          console.error(`[smarthome] status failed for ${appliance.haId}:`, err.message);
+          return summarizeAppliance(appliance, []);
+        }
+      })
+    );
+
+    res.json({ appliances: summaries });
+  } catch (err) {
+    console.error('[smarthome] failed to fetch Home Connect appliances:', err.message);
+    res.status(500).json({ error: 'Could not load kitchen appliance status.' });
   }
 });

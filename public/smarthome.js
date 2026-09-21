@@ -235,5 +235,79 @@ async function loadShades() {
   }
 }
 
+const homeConnectConnectRowEl = document.getElementById('homeconnect-connect-row');
+const appliancesEl = document.getElementById('appliances');
+const appliancesEmptyEl = document.getElementById('appliances-empty');
+
+async function renderHomeConnectConnectRow() {
+  try {
+    const response = await fetch('/api/smarthome/homeconnect/status');
+    const status = await response.json();
+    if (status.connected) return false;
+  } catch (err) {
+    return false; // the appliances fetch below will surface the real error
+  }
+
+  homeConnectConnectRowEl.classList.remove('hidden');
+  homeConnectConnectRowEl.classList.add('flex');
+  homeConnectConnectRowEl.innerHTML = `
+    <a href="/auth/homeconnect" class="hl-button inline-block text-center">
+      Connect kitchen appliances
+    </a>
+  `;
+  return true;
+}
+
+// Home Connect's own operation-state values (e.g. "BSH.Common.EnumType.
+// OperationState.Run") are long and inconsistent to show raw — this maps
+// the handful that matter to something readable, and just shows whatever
+// comes back for anything unmapped rather than hiding it.
+function readableOperationState(state) {
+  if (!state) return null;
+  const label = state.split('.').pop();
+  return label.replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+function applianceCardHtml(appliance) {
+  const parts = [];
+  if (!appliance.connected) parts.push('offline');
+  const state = readableOperationState(appliance.operationState);
+  if (state) parts.push(state);
+  if (appliance.doorState) parts.push(`door ${appliance.doorState.split('.').pop().toLowerCase()}`);
+
+  return `
+    <li class="py-3">
+      <p class="font-medium">${appliance.name} <span class="hl-muted font-normal text-sm">· ${appliance.type}</span></p>
+      <p class="text-sm hl-muted mt-0.5">${parts.length ? parts.join(' · ') : 'No live status reported'}</p>
+    </li>
+  `;
+}
+
+async function loadAppliances() {
+  const showedConnectButton = await renderHomeConnectConnectRow();
+  if (showedConnectButton) return;
+
+  let response;
+  try {
+    response = await fetch('/api/smarthome/homeconnect/appliances');
+  } catch (err) {
+    return; // quiet failure here — this section is secondary to the thermostat above
+  }
+
+  if (response.status === 401) return;
+
+  const data = await response.json();
+  if (!response.ok) return;
+
+  if (!data.appliances || data.appliances.length === 0) {
+    appliancesEmptyEl.classList.remove('hidden');
+    return;
+  }
+
+  appliancesEl.classList.remove('hidden');
+  appliancesEl.innerHTML = data.appliances.map(applianceCardHtml).join('');
+}
+
 loadThermostats();
 loadShades();
+loadAppliances();
