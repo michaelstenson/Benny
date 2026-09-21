@@ -271,27 +271,12 @@ input[type='checkbox'] {
 }
 
 .hl-advice-result { margin-top: 24px; }
-.hl-advice-verdict {
-  margin-top: 16px;
-  font-family: 'Baloo 2', 'Nunito', sans-serif;
-  font-weight: 700;
-  font-size: 22px;
-  color: var(--hl-text);
-  line-height: 1.3;
-}
 .hl-advice-haiku {
   margin-top: 14px;
   font-style: italic;
   color: var(--hl-text-dim);
   white-space: pre-line;
   line-height: 1.7;
-}
-.hl-advice-eggwash {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--hl-border);
-  font-size: 13px;
-  color: var(--hl-text-faint);
 }
 
 /* Party lights strip + dots (home header) */

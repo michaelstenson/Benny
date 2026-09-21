@@ -1,88 +1,76 @@
-// Benny's "magic eight ball" — turns a question into two things: genuine,
-// take-it-or-leave-it guidance for thinking the question through, plus ONE
-// playful aside (a fortune-cookie verdict, a themed haiku, or a nonsensical
-// Great British Bake Off-style "everything gets better with an egg wash"
-// line) — chosen at random per question, not all three at once. Uses the
-// same tool-use pattern as choreParser.js/billParser.js so the frontend
+// Benny's mindfulness companion — turns a household question into calm,
+// grounded guidance for approaching it (not a direct answer or solution),
+// plus a themed haiku with the same reflective tone. Previously this asked
+// for a random playful aside (a magic-eight-ball verdict, a haiku, or an
+// absurd Great British Bake Off aside); that's gone now in favor of a
+// single, more sincere purpose — helping whoever's asking find some peace
+// with the question before problem-solving it. A first pass at the
+// mindfulness rewrite came out a little too serious, so there's room for
+// dad jokes, wordplay, and Philly flavor (Wawa, "Go Birds", calling
+// something a "jawn") when the question is light enough for it — Benny
+// should read the room, not turn into a meditation app. Uses the same
+// Claude tool-use pattern as choreParser.js/billParser.js so the frontend
 // gets clean fields to style, instead of one blob of text to parse.
 
 import { anthropic, FAST_EXTRACTION_MODEL } from './anthropicClient.js';
 
-// Which playful format gets used is decided here, in code, by chance —
-// NOT left up to the model to pick. That's what actually guarantees only
-// one shows up per answer; leaving it to the model's judgment would be a
-// suggestion, not a rule.
-const PLAYFUL_FORMATS = {
-  fortune_cookie: {
-    label: 'fortune-cookie verdict',
-    fieldDescription:
-      'A short (under 12 words), confident-sounding, magic-eight-ball-style predictive verdict — ' +
-      "e.g. 'Without a doubt' or 'The signs point to yes, eventually.' Playful and noncommittal, " +
-      'never a real prediction.',
-  },
-  haiku: {
-    label: 'haiku',
-    fieldDescription:
-      'A 3-line haiku (5-7-5 syllables), loosely themed on the question, separated by newline ' +
-      'characters. Can be silly, wistful, or dramatic — whatever fits the question.',
-  },
-  egg_wash: {
-    label: 'egg-wash aside',
-    fieldDescription:
-      'One sentence of absurd Great British Bake Off-style advice that everything gets better ' +
-      "with an egg wash — total non sequitur, doesn't need to logically follow from the question " +
-      'at all.',
+const GENERATE_ADVICE_TOOL = {
+  name: 'generate_advice',
+  description: 'Give calm, mindfulness-oriented guidance for a household question, plus a themed haiku.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      guidance: {
+        type: 'string',
+        description:
+          '2-4 sentences of grounded, mindfulness-oriented guidance for approaching this question ' +
+          'calmly — help the person find a little peace and perspective on it BEFORE problem-solving ' +
+          'it, not a direct answer or solution. Draw on real mindfulness/stress-reduction practices ' +
+          '(noticing the present moment, breath awareness, self-compassion, letting go of urgency, ' +
+          "reframing away from anxious what-ifs) where they genuinely fit the question — don't force " +
+          "a breathing exercise onto something that's really just a logistics question; instead help " +
+          'them meet even a mundane question with a calmer, less reactive mind. Specific to what was ' +
+          'actually asked, not generic meditation-app filler. Default to working in some personality — ' +
+          'a dad joke, a bit of wordplay, or a wink of Philly flavor (Wawa hoagies, "Go Birds", calling ' +
+          'something a "jawn") — for any question that is not clearly serious; treat leaving the humor ' +
+          "out as the exception, not including it. It should still read as genuine grounding with a " +
+          "wink, not a stand-up bit — don't let it crowd out the actual guidance. Dial the humor all " +
+          "the way back for anything that sounds like it's genuinely weighing on the person. Never real " +
+          'medical, legal, financial, or safety advice — if the question brushes against something ' +
+          'serious, gently point toward a real professional while still helping them feel grounded ' +
+          'while they deal with it.',
+      },
+      haiku: {
+        type: 'string',
+        description:
+          'A 3-line haiku (5-7-5 syllables), loosely themed on the question, separated by newline ' +
+          'characters. Calm and reflective by default, matching the guidance above — but a playful or ' +
+          'punny haiku (Philly flavor welcome) is fair game for a lighthearted question. Keep it gentle ' +
+          'and non-absurd for anything that sounds like it actually matters to the person.',
+      },
+    },
+    required: ['guidance', 'haiku'],
   },
 };
 
-function pickPlayfulFormat() {
-  const keys = Object.keys(PLAYFUL_FORMATS);
-  return keys[Math.floor(Math.random() * keys.length)];
-}
-
 export async function generateAdvice(question) {
-  const format = pickPlayfulFormat();
-  const spec = PLAYFUL_FORMATS[format];
-
-  const tool = {
-    name: 'generate_advice',
-    description:
-      'Give genuine guidance for a household question, plus one playful aside in a specific format.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        guidance: {
-          type: 'string',
-          description:
-            '2-4 sentences of genuine, thoughtful guidance for how to think through this specific ' +
-            'question — NOT a direct answer or solution, and not real medical/legal/financial/safety ' +
-            'advice. More like a good friend helping you reason it out: a useful reframe, a question ' +
-            "worth asking yourself, or a consideration that's easy to overlook. Specific to what was " +
-            'actually asked, not generic filler that could apply to any question.',
-        },
-        playful_reply: {
-          type: 'string',
-          description:
-            `${spec.fieldDescription} This is the ONLY playful format to produce this time — a ` +
-            `${spec.label}, not either of the other two styles.`,
-        },
-      },
-      required: ['guidance', 'playful_reply'],
-    },
-  };
-
   const response = await anthropic.messages.create({
     model: FAST_EXTRACTION_MODEL,
     max_tokens: 400,
     temperature: 1,
     system:
-      "You are Benny, a household assistant with two modes at once: a genuinely thoughtful " +
-      'advisor, and a playful side with exactly one silly party trick per answer (this time: a ' +
-      `${spec.label}). Someone is asking a real household question. First give them real, useful ` +
-      `guidance for thinking it through — then, separately, indulge the silly side with a ` +
-      `${spec.label} and nothing else playful. Keep the two clearly distinct; don't let the ` +
-      'playful part undercut or contradict the genuine one.',
-    tools: [tool],
+      'You are Benny, a household assistant with a mindful, grounding side — and a little bit of a ' +
+      'goofball. Someone is asking a real household question — sometimes mundane, sometimes weighing ' +
+      'on them more than it should. Help them find calm and perspective on it first: draw on real ' +
+      "mindfulness and stress-reduction practices where they genuinely fit, without forcing meditation-" +
+      'speak onto a simple logistics question. Read the room, but default toward playful: for anything ' +
+      'that is not clearly serious, actively work in real personality — a dad joke, some wordplay, ' +
+      'even a bit of Philly flavor (Wawa, "Go Birds", calling something a "jawn") — rather than saving ' +
+      "it for rare occasions. Drop all of that and stay warm and straightforward the moment a question " +
+      "sounds like it's genuinely bothering the person. Then offer a short haiku matching whichever " +
+      'tone you just struck. Never give real medical, legal, financial, or safety advice — for anything ' +
+      'serious, gently point toward a real professional while still helping them feel grounded about it.',
+    tools: [GENERATE_ADVICE_TOOL],
     tool_choice: { type: 'tool', name: 'generate_advice' },
     messages: [{ role: 'user', content: question }],
   });
@@ -93,8 +81,7 @@ export async function generateAdvice(question) {
   }
 
   return {
-    format,
     guidance: toolUse.input.guidance,
-    reply: toolUse.input.playful_reply,
+    haiku: toolUse.input.haiku,
   };
 }
