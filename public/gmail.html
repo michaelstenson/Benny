@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Benny — Gmail</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+  <meta name="theme-color" content="#17151f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Benny" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Nunito:wght@400;600;700&display=swap">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/theme.css" />
+</head>
+<body class="hl-page min-h-screen flex items-center justify-center p-6">
+  <main class="hl-card max-w-lg w-full p-8">
+    <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-3">
+        <div class="hl-logo">
+          <svg width="20" height="24" viewBox="0 0 100 122" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M76 46C90 52 94 66 90 78C82 74 72 66 68 56L76 46Z" fill="#F4ECD8"/>
+            <path d="M50 8C66 8 76 26 76 46V96C76 110 64 118 50 118C36 118 24 110 24 96V46C24 26 34 8 50 8Z" fill="#F4ECD8"/>
+            <path d="M50 30C58 30 62 42 62 54V100C62 108 57 112 50 112C43 112 38 108 38 100V54C38 42 42 30 50 30Z" fill="#211F2B"/>
+            <path d="M67 13L98 23L67 33Z" fill="#F2C879"/>
+            <circle cx="59" cy="18" r="3.4" fill="#211F2B"/>
+            <ellipse cx="40" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
+            <ellipse cx="60" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
+          </svg>
+        </div>
+        <h1 class="hl-h1">Gmail</h1>
+      </div>
+      <a href="/" class="hl-back">← home</a>
+    </div>
+
+    <p class="hl-subtitle mb-5">
+      Benny can read your inbox and create drafts — it never sends anything.
+      You always review and hit send yourself, in Gmail.
+    </p>
+
+    <!-- Owner switcher -->
+    <div class="flex gap-2 mb-6">
+      <button type="button" data-owner="michael" class="hl-button owner-tab text-sm">Michael</button>
+      <button type="button" data-owner="mer" class="hl-button owner-tab text-sm">Mer</button>
+    </div>
+
+    <div id="error" class="hidden mb-4 text-sm hl-error"></div>
+    <div id="connect-row" class="hidden mb-6"></div>
+
+    <p id="loading" class="hl-muted text-sm">Loading...</p>
+
+    <h2 class="hl-label mb-2">Recent messages</h2>
+    <ul id="messages" class="hidden hl-divide mb-8"></ul>
+    <p id="messages-empty" class="hidden hl-muted text-sm mb-8">No recent messages found.</p>
+
+    <div id="draft-section" class="hidden">
+      <h2 class="hl-label mb-2">Create a test draft</h2>
+      <p class="hl-subtitle mb-3">
+        Creates a real draft in the selected person's Gmail, ready to review — nothing sends automatically.
+      </p>
+      <form id="draft-form" class="flex flex-col gap-2">
+        <input id="draft-to" type="email" placeholder="To" class="hl-input" autocomplete="off" required />
+        <input id="draft-subject" type="text" placeholder="Subject" class="hl-input" autocomplete="off" required />
+        <textarea id="draft-body" placeholder="Body" rows="3" class="hl-input" required></textarea>
+        <button type="submit" class="hl-button self-start text-sm">Create draft</button>
+      </form>
+      <p id="draft-status" class="text-xs hl-muted mt-2"></p>
+    </div>
+  </main>
+
+  <script src="/gmail.js"></script>
+</body>
+</html>

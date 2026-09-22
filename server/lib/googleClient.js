@@ -6,6 +6,7 @@
 // sharing.
 
 import { google } from 'googleapis';
+import { saveTokens, clearTokens } from './tokenStore.js';
 
 export function createOAuthClient() {
   return new google.auth.OAuth2(
@@ -23,9 +24,46 @@ export function createOAuthClient() {
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 export const CALENDAR_EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 
-// Gmail is NOT requested yet, on purpose — see the README's Home Connect/
-// Gmail notes. Adding it means enabling the Gmail API and its scopes on
-// the Data Access page in Google Cloud Console first (same place Calendar
-// had to be enabled), so it's its own dedicated reconnect later rather
-// than bundled into this one — requesting a scope the consent screen
-// isn't configured for would just break this reconnect for everyone.
+// Read-only for the inbox, plus compose — deliberately NOT gmail.send or
+// the full mail.google.com scope. gmail.compose already covers everything
+// this app needs (create/read/update/delete drafts) without granting the
+// broader ability a fuller scope would; see gmailClient.js for the actual
+// code-level guarantee this backs up (no function in this app ever calls
+// Gmail's send endpoint, drafts only).
+export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+export const GMAIL_COMPOSE_SCOPE = 'https://www.googleapis.com/auth/gmail.compose';
+
+// Builds an OAuth2 client already carrying one owner's stored tokens, with
+// the refresh-token-persisting listener wired up. Shared by every Google
+// API this app calls (Calendar, Gmail, ...) — one household member's
+// tokens work the same way regardless of which API is being called,
+// since it's all one OAuth client with one combined scope grant.
+export function authenticatedClientFor(owner, tokens) {
+  const oauth2Client = createOAuthClient();
+  oauth2Client.setCredentials(tokens);
+  oauth2Client.on('tokens', (newTokens) => {
+    saveTokens(owner, newTokens).catch((err) =>
+      console.error(`[google] failed to persist refreshed tokens for ${owner}:`, err.message)
+    );
+  });
+  return oauth2Client;
+}
+
+// "invalid_grant" means the refresh_token itself is dead (revoked, or —
+// if the OAuth consent screen is still in "Testing" publishing status in
+// Google Cloud Console — expired after 7 days), not just that the access
+// token needs refreshing. That's unrecoverable without a real reconnect,
+// so this clears the stored tokens rather than leaving a
+// permanently-broken row behind — that's what makes the "Connect ___'s
+// calendar" button on /calendar.html come back instead of failing the
+// same way forever. Returns true if it handled the error (caller should
+// treat the request as "not connected"), false if the caller should
+// handle/rethrow it as something else.
+export async function clearIfDeadToken(owner, err) {
+  if (!String(err.message).includes('invalid_grant')) return false;
+  await clearTokens(owner).catch((clearErr) =>
+    console.error(`[google] failed to clear dead tokens for ${owner}:`, clearErr.message)
+  );
+  console.error(`[google] ${owner}'s refresh token is dead — cleared, reconnect needed.`);
+  return true;
+}

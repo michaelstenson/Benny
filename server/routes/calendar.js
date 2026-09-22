@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { google } from 'googleapis';
-import { createOAuthClient } from '../lib/googleClient.js';
-import { loadTokens, saveTokens, clearTokens, OWNERS } from '../lib/tokenStore.js';
+import { authenticatedClientFor, clearIfDeadToken } from '../lib/googleClient.js';
+import { loadTokens, OWNERS } from '../lib/tokenStore.js';
 import { parseEventText } from '../lib/calendarEventParser.js';
 
 export const calendarRouter = Router();
@@ -9,40 +9,6 @@ export const calendarRouter = Router();
 // The household is in Chicago (see digest.js) — event times typed in as
 // "7pm" mean 7pm there, not UTC or wherever the server happens to run.
 const HOUSEHOLD_TIMEZONE = 'America/Chicago';
-
-// Builds an OAuth2 client already carrying one owner's stored tokens, with
-// the refresh-token-persisting listener wired up — the setup every
-// authenticated Google Calendar call needs, whether it's reading events
-// or creating one.
-function authenticatedClientFor(owner, tokens) {
-  const oauth2Client = createOAuthClient();
-  oauth2Client.setCredentials(tokens);
-  oauth2Client.on('tokens', (newTokens) => {
-    saveTokens(owner, newTokens).catch((err) =>
-      console.error(`[calendar] failed to persist refreshed tokens for ${owner}:`, err.message)
-    );
-  });
-  return oauth2Client;
-}
-
-// "invalid_grant" means the refresh_token itself is dead (revoked, or —
-// if the OAuth consent screen is still in "Testing" publishing status in
-// Google Cloud Console — expired after 7 days), not just that the access
-// token needs refreshing. That's unrecoverable without a real reconnect,
-// so this clears the stored tokens rather than leaving a
-// permanently-broken row behind — that's what makes the "Connect ___'s
-// calendar" button on /calendar.html come back instead of failing the
-// same way forever. Returns true if it handled the error (caller should
-// treat the request as "not connected"), false if the caller should
-// handle/rethrow it as something else.
-async function clearIfDeadToken(owner, err) {
-  if (!String(err.message).includes('invalid_grant')) return false;
-  await clearTokens(owner).catch((clearErr) =>
-    console.error(`[calendar] failed to clear dead tokens for ${owner}:`, clearErr.message)
-  );
-  console.error(`[calendar] ${owner}'s refresh token is dead — cleared, reconnect needed.`);
-  return true;
-}
 
 // GET /api/calendar/status — lets the frontend ask "who's connected?"
 // without triggering an actual Google API call. Returns one boolean per
