@@ -678,6 +678,66 @@ math entirely rather than getting it wrong in a subtle way once a year.
   authorize call would have broken calendar reconnecting for everyone,
   not just added Gmail. Its own dedicated stage, later.
 
+## Stage 14: Gmail (read-only + draft-only compose)
+
+Adds `/gmail.html`: a per-owner (not merged — email is personal in a way
+a shared household calendar isn't) view of recent inbox messages, plus a
+"create a test draft" form. The decision behind this stage: Benny gets
+full read access, but is only ever allowed to *create drafts*, never
+send. That's enforced in the code, not just as a scope choice —
+`server/lib/gmailClient.js` has no function that calls Gmail's send
+endpoint at all, only `drafts.create`. There is no path from Benny to a
+sent email; a person always opens the draft in Gmail and sends it
+themselves.
+
+**Reuses Calendar's connection** — Gmail's scopes are requested
+alongside `calendar.readonly`/`calendar.events` in the same Google OAuth
+client, so there's no separate "Connect Gmail" flow or token table; it's
+the same `google_tokens` rows Calendar already uses, just with a wider
+scope grant once reconnected.
+
+**Refactored while building this:** `authenticatedClientFor()` and
+`clearIfDeadToken()` (the self-healing dead-token logic from the
+calendar/chores digest work) moved from `calendar.js` into
+`googleClient.js`, since both are generic to "any Google API call using
+a household member's stored tokens" — Gmail needed the exact same
+plumbing Calendar already had, so this avoided a second copy of it.
+
+**Status: code complete, not yet reachable — blocked on your Google
+account, not on this repo.** Verified locally against the real Gmail
+API that both the read and draft-create paths work correctly end to
+end, failing cleanly with "Insufficient Permission" against the
+existing calendar-only-scoped tokens (exactly the expected state before
+the scope is actually granted — same shape as testing calendar write
+before its own reconnect). What's left, in order:
+1. Turn on 2-Step Verification on the Google account behind `benny-app`
+   — Google began enforcing this platform-wide on September 21, 2026,
+   for *any* new API enablement, not something specific to this project.
+   `myaccount.google.com/security`.
+2. Enable the Gmail API in Google Cloud Console
+   (`console.cloud.google.com/apis/library/gmail.googleapis.com`).
+3. Add `gmail.readonly` and `gmail.compose` on the OAuth consent
+   screen's Data Access page — the same place Calendar's scopes live.
+4. Add those two scopes to `auth.js`'s authorize call alongside
+   Calendar's, so one reconnect grants everything.
+Steps 1-3 are Google Cloud Console changes only the account owner can
+make; step 4 is a one-line code change once 1-3 are done.
+
+**Setup:** none beyond the reconnect above — same `GOOGLE_CLIENT_ID`/
+`GOOGLE_CLIENT_SECRET` as Calendar, no new environment variables, no new
+Supabase table.
+
+**Scoped out of v1, on purpose:**
+- **No real feature built on top yet** — this stage proves the
+  connection (read + draft-only write) the same way Stage 8a proved
+  Resideo read-only before Stage 8b added control. What Benny actually
+  *does* with Gmail access (drafting a reply to a vendor, surfacing an
+  appointment confirmation) depends on the autonomous agent, which isn't
+  scoped yet either — see the roadmap.
+- **No message search/filtering** — just the most recent N messages, to
+  prove the connection. Anything more targeted (a specific label, a
+  specific sender) waits for a real use case to shape it.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -776,13 +836,14 @@ GitHub repo.
 13. ✅ Home screen icon — proper penguin icon + standalone launch on phones (see Stage 11 above)
 14. ⏳ Home Connect (hood + dishwasher) — status only so far (see Stage 12 above); control, and confirming the OAuth scopes/refresh-token behavior against a real registered app, still to come
 15. ✅ Google Calendar write access — natural-language event entry with a preview/confirm step (see Stage 13 above). Both Michael and Mer need to reconnect their calendar to actually use it — see Stage 13's "scope change" note.
+16. ⏳ Gmail (read-only + draft-only compose) — code complete (see Stage 14 above), but not reachable yet: blocked on turning on 2-Step Verification for the Google account, which Google now requires before the Gmail API can even be enabled. Three more Google Cloud Console steps after that, all spelled out in Stage 14.
 
 ## Future feature ideas (unscheduled)
 
 Not sequenced yet — captured here so they don't get lost. See conversation
 notes for a fuller breakdown of steps/UX for each.
 
-16. 💡 Chores ↔ calendar, tighter tie-in — right now the two are linked
+17. 💡 Chores ↔ calendar, tighter tie-in — right now the two are linked
     only at display time (Stage 10's "Today" digest shows both side by
     side). Whether to go further — e.g. a chore with a due date also
     creating/syncing a calendar event — is an open design call, not yet
@@ -791,17 +852,6 @@ notes for a fuller breakdown of steps/UX for each.
     data across `chores` and Google Calendar that could drift out of
     sync. Worth revisiting once the digest has been lived with for a
     while and it's clear whether the side-by-side view is enough.
-17. 💡 Gmail integration (read + compose-draft-only) — decided: full read
-    access, but Benny is only ever allowed to *create drafts*, never call
-    Gmail's send API directly — a person reviews and hits send themselves
-    every time. That's a code-level constraint (the Gmail client library
-    only ever calls `drafts.create`, never `messages.send`), not just a
-    scope restriction, so the guarantee holds even though the OAuth scope
-    needed (`gmail.compose`) technically permits sending. Needs its own
-    Google Cloud Console setup first (enable the Gmail API, add its
-    scopes on the Data Access page) before it can be requested — see
-    Stage 13's note on why it wasn't bundled into the calendar-write
-    reconnect.
 18. 💡 Smart home controls, expanded — device inventory done (see
     conversation notes), broken down by integration path:
     - **Litter-Robot 4** — Whisker cloud API (community-proven via
@@ -828,8 +878,8 @@ notes for a fuller breakdown of steps/UX for each.
     day, eventually extending to the Netherlands relocation timeline
     (~Sept 2027): Dutch language study, professional networking in NL,
     and the broader move logistics. Depends on #15 (calendar write, now
-    built) and #17 (Gmail, not yet built). Two things this needs to
-    settle before real building starts:
+    built) and #16 (Gmail, code built but not yet reachable — see Stage
+    14). Two things this needs to settle before real building starts:
     - **Autonomy model** — "autonomous" should mean autonomous at
       *drafting*, not at *acting*. The Gmail decision above already
       settled this for email (draft-only, human sends); the same
