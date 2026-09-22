@@ -1,8 +1,9 @@
-// Handles the "Connect Google Calendar" handshake: send the user to
-// Google, then receive them back with a one-time code we trade for
-// real tokens.
+// Handles the Google OAuth handshake: send the user to Google, then
+// receive them back with a one-time code we trade for real tokens. One
+// reconnect now grants Calendar (read + write) and Gmail (read +
+// draft-only compose) together — see googleClient.js for the scope list.
 //
-// Two people can connect their own calendar (Michael and Mer), so the
+// Two people can connect their own account (Michael and Mer), so the
 // route needs to know who's signing in. We can't just remember "who
 // clicked the button" server-side — the redirect round-trips through
 // Google and our server is stateless between requests — so we stash the
@@ -10,7 +11,13 @@
 // on the callback.
 
 import { Router } from 'express';
-import { createOAuthClient, CALENDAR_SCOPE, CALENDAR_EVENTS_SCOPE } from '../lib/googleClient.js';
+import {
+  createOAuthClient,
+  CALENDAR_SCOPE,
+  CALENDAR_EVENTS_SCOPE,
+  GMAIL_READONLY_SCOPE,
+  GMAIL_DRAFTS_CREATE_SCOPE,
+} from '../lib/googleClient.js';
 import { saveTokens, OWNERS } from '../lib/tokenStore.js';
 
 export const authRouter = Router();
@@ -64,7 +71,7 @@ authRouter.get('/google/:owner', (req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline', // "offline" is what makes Google issue a refresh_token, not just a short-lived access_token
     prompt: 'consent', // forces the consent screen (and a fresh refresh_token) every time, which is handy while we're developing
-    scope: [CALENDAR_SCOPE, CALENDAR_EVENTS_SCOPE],
+    scope: [CALENDAR_SCOPE, CALENDAR_EVENTS_SCOPE, GMAIL_READONLY_SCOPE, GMAIL_DRAFTS_CREATE_SCOPE],
     state: owner,
   });
 

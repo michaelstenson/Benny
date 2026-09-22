@@ -703,25 +703,43 @@ calendar/chores digest work) moved from `calendar.js` into
 a household member's stored tokens" — Gmail needed the exact same
 plumbing Calendar already had, so this avoided a second copy of it.
 
-**Status: code complete, not yet reachable — blocked on your Google
-account, not on this repo.** Verified locally against the real Gmail
-API that both the read and draft-create paths work correctly end to
-end, failing cleanly with "Insufficient Permission" against the
-existing calendar-only-scoped tokens (exactly the expected state before
-the scope is actually granted — same shape as testing calendar write
-before its own reconnect). What's left, in order:
+**Status: fully wired up, waiting on Michael and Mer to reconnect.**
+Verified locally against the real Gmail API (before the scopes existed)
+that both the read and draft-create paths work correctly end to end,
+failing cleanly with "Insufficient Permission" against the existing
+calendar-only-scoped tokens — exactly the expected state before the
+scope is actually granted. What it took to get here:
 1. Turn on 2-Step Verification on the Google account behind `benny-app`
    — Google began enforcing this platform-wide on September 21, 2026,
    for *any* new API enablement, not something specific to this project.
-   `myaccount.google.com/security`.
-2. Enable the Gmail API in Google Cloud Console
-   (`console.cloud.google.com/apis/library/gmail.googleapis.com`).
-3. Add `gmail.readonly` and `gmail.compose` on the OAuth consent
-   screen's Data Access page — the same place Calendar's scopes live.
-4. Add those two scopes to `auth.js`'s authorize call alongside
-   Calendar's, so one reconnect grants everything.
-Steps 1-3 are Google Cloud Console changes only the account owner can
-make; step 4 is a one-line code change once 1-3 are done.
+2. Enable the Gmail API in Google Cloud Console.
+3. Add scopes on the OAuth consent screen's Data Access page — see
+   below for which ones, and why not `gmail.compose`.
+4. Add those scopes to `auth.js`'s authorize call alongside Calendar's,
+   so one reconnect grants everything (done — see `googleClient.js`).
+
+**The scope actually used is narrower than originally planned.**
+`gmail.compose` ("Manage drafts and send emails," per Google's own
+description) was the obvious choice, but Google Cloud Console's scope
+picker surfaced `gmail.drafts.create` ("Compose new draft emails") —
+exactly, and only, what `gmailClient.js` actually does. Used that
+instead: `GMAIL_DRAFTS_CREATE_SCOPE` in `googleClient.js`, not
+`GMAIL_COMPOSE_SCOPE`. Requesting the exact scope the code exercises,
+when one exists, beats requesting a broader one "to be safe" — the
+draft-only guarantee doesn't depend on Benny's own restraint alone
+anymore, since the OAuth grant itself no longer includes send/delete
+either way.
+
+**One thing worth knowing for later:** Google Cloud Console classifies
+`gmail.readonly` as a **restricted** scope (its highest sensitivity
+tier — "highly sensitive user data"), one step above the "sensitive"
+tier Calendar's scopes and `gmail.drafts.create` sit in. This doesn't
+block anything while the app stays in "Testing" publishing status with
+just the two of you as test users, but the "move to In production"
+plan discussed for fixing Calendar's 7-day-refresh-token issue (see the
+roadmap) may need a closer look at what restricted scopes require for
+that transition — possibly more than the sensitive-scope-only
+assumption that plan was based on.
 
 **Setup:** none beyond the reconnect above — same `GOOGLE_CLIENT_ID`/
 `GOOGLE_CLIENT_SECRET` as Calendar, no new environment variables, no new
@@ -836,7 +854,7 @@ GitHub repo.
 13. ✅ Home screen icon — proper penguin icon + standalone launch on phones (see Stage 11 above)
 14. ⏳ Home Connect (hood + dishwasher) — status only so far (see Stage 12 above); control, and confirming the OAuth scopes/refresh-token behavior against a real registered app, still to come
 15. ✅ Google Calendar write access — natural-language event entry with a preview/confirm step (see Stage 13 above). Both Michael and Mer need to reconnect their calendar to actually use it — see Stage 13's "scope change" note.
-16. ⏳ Gmail (read-only + draft-only compose) — code complete (see Stage 14 above), but not reachable yet: blocked on turning on 2-Step Verification for the Google account, which Google now requires before the Gmail API can even be enabled. Three more Google Cloud Console steps after that, all spelled out in Stage 14.
+16. ✅ Gmail (read-only + draft-only compose) — fully wired up (see Stage 14 above). Both Michael and Mer need to reconnect via `/calendar.html` to actually use it — the same one reconnect now grants Calendar write and Gmail together.
 
 ## Future feature ideas (unscheduled)
 

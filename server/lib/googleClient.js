@@ -24,14 +24,15 @@ export function createOAuthClient() {
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 export const CALENDAR_EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 
-// Read-only for the inbox, plus compose — deliberately NOT gmail.send or
-// the full mail.google.com scope. gmail.compose already covers everything
-// this app needs (create/read/update/delete drafts) without granting the
-// broader ability a fuller scope would; see gmailClient.js for the actual
-// code-level guarantee this backs up (no function in this app ever calls
-// Gmail's send endpoint, drafts only).
+// Read-only for the inbox, plus the narrowest possible write scope.
+// gmail.drafts.create ("Compose new draft emails") was picked over the
+// broader gmail.compose ("Manage drafts and send emails" — which also
+// permits read/update/delete of drafts and, per Google's own scope
+// description, sending) specifically because gmailClient.js only ever
+// calls drafts.create — there was a scope available that matches exactly
+// what the code does, so there was no reason to request more than that.
 export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
-export const GMAIL_COMPOSE_SCOPE = 'https://www.googleapis.com/auth/gmail.compose';
+export const GMAIL_DRAFTS_CREATE_SCOPE = 'https://www.googleapis.com/auth/gmail.drafts.create';
 
 // Builds an OAuth2 client already carrying one owner's stored tokens, with
 // the refresh-token-persisting listener wired up. Shared by every Google
