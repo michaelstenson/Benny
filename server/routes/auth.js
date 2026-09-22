@@ -10,7 +10,7 @@
 // on the callback.
 
 import { Router } from 'express';
-import { createOAuthClient, CALENDAR_SCOPE } from '../lib/googleClient.js';
+import { createOAuthClient, CALENDAR_SCOPE, CALENDAR_EVENTS_SCOPE } from '../lib/googleClient.js';
 import { saveTokens, OWNERS } from '../lib/tokenStore.js';
 
 export const authRouter = Router();
@@ -64,7 +64,7 @@ authRouter.get('/google/:owner', (req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline', // "offline" is what makes Google issue a refresh_token, not just a short-lived access_token
     prompt: 'consent', // forces the consent screen (and a fresh refresh_token) every time, which is handy while we're developing
-    scope: [CALENDAR_SCOPE],
+    scope: [CALENDAR_SCOPE, CALENDAR_EVENTS_SCOPE],
     state: owner,
   });
 

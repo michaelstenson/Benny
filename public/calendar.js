@@ -123,4 +123,101 @@ async function loadEvents() {
     .join('');
 }
 
+// --- New event: natural-language entry with a preview/confirm step ---
+// Unlike chores (single-step, low stakes if wrong), a calendar event is
+// visible on a shared calendar — worth a "did I get this right?" pause
+// before it's actually created.
+
+const addEventForm = document.getElementById('add-event-form');
+const eventInput = document.getElementById('event-input');
+const addEventStatus = document.getElementById('add-event-status');
+const eventPreviewEl = document.getElementById('event-preview');
+const eventPreviewSummaryEl = document.getElementById('event-preview-summary');
+const eventConfirmButton = document.getElementById('event-confirm');
+const eventCancelButton = document.getElementById('event-cancel');
+
+let pendingEvent = null;
+
+function formatEventPreview(event) {
+  const owner = OWNER_META[event.owner]?.label || event.owner;
+  const date = new Date(`${event.date}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  if (!event.start_time) {
+    return `${event.title} — ${owner}'s calendar, ${date} (all day)`;
+  }
+  const time = new Date(`${event.date}T${event.start_time}:00`).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `${event.title} — ${owner}'s calendar, ${date} at ${time}`;
+}
+
+function resetEventForm() {
+  pendingEvent = null;
+  eventInput.value = '';
+  eventPreviewEl.classList.add('hidden');
+}
+
+addEventForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const text = eventInput.value.trim();
+  if (!text) return;
+
+  addEventStatus.textContent = '';
+  eventPreviewEl.classList.add('hidden');
+  addEventForm.querySelector('button').disabled = true;
+
+  try {
+    const response = await fetch('/api/calendar/events/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      addEventStatus.textContent = data.error || 'Something went wrong.';
+    } else {
+      pendingEvent = data.event;
+      eventPreviewSummaryEl.textContent = formatEventPreview(pendingEvent);
+      eventPreviewEl.classList.remove('hidden');
+    }
+  } catch (err) {
+    addEventStatus.textContent = `Could not reach the backend: ${err.message}`;
+  } finally {
+    addEventForm.querySelector('button').disabled = false;
+  }
+});
+
+eventCancelButton.addEventListener('click', resetEventForm);
+
+eventConfirmButton.addEventListener('click', async () => {
+  if (!pendingEvent) return;
+
+  eventConfirmButton.disabled = true;
+  try {
+    const response = await fetch('/api/calendar/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pendingEvent),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      addEventStatus.textContent = data.error || 'Could not add that to the calendar.';
+      return;
+    }
+
+    resetEventForm();
+    loadEvents(); // re-pull real state so the new event shows up in the merged list
+  } catch (err) {
+    addEventStatus.textContent = `Could not reach the backend: ${err.message}`;
+  } finally {
+    eventConfirmButton.disabled = false;
+  }
+});
+
 loadEvents();

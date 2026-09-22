@@ -41,6 +41,27 @@
          Both can show at once; each is independent of the other. -->
     <div id="connect-row" class="hidden flex-col gap-2 mb-6"></div>
 
+    <form id="add-event-form" class="flex gap-2 mb-2">
+      <input
+        id="event-input"
+        type="text"
+        placeholder="e.g. dinner with the Hansens Friday at 7"
+        class="hl-input flex-1"
+        autocomplete="off"
+      />
+      <button type="submit" class="hl-button">Add</button>
+    </form>
+    <p id="add-event-status" class="text-xs hl-error h-4 mb-2"></p>
+
+    <!-- Shown after /parse, before the event is actually created -->
+    <div id="event-preview" class="hidden hl-inset mb-6">
+      <p id="event-preview-summary" class="hl-dim"></p>
+      <div class="flex gap-2 mt-3">
+        <button type="button" id="event-confirm" class="hl-button text-sm">Add to calendar</button>
+        <button type="button" id="event-cancel" class="hl-button text-sm" style="background:transparent;color:var(--hl-text-faint);">Cancel</button>
+      </div>
+    </div>
+
     <p id="loading" class="hl-muted text-sm">Loading...</p>
 
     <!-- Shown once we have events (or know there are none) -->

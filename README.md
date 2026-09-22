@@ -629,6 +629,55 @@ doesn't actually exist in Supabase — `/api/smarthome/shades` fails with
 assume it's there; it needs to actually be created before that part of
 Stage 8c can work. Tracked as an open item, not fixed here.
 
+## Stage 13: Google Calendar write access
+
+Adds a "New event" box to `/calendar.html`: type something like "dinner
+with the Hansens Friday at 7," review a plain-language preview of what
+Benny understood, then confirm before it actually lands on a real
+calendar. Benny can now create events, not just display them.
+
+**Why the preview/confirm step, when chores don't have one:** a chore
+that's slightly wrong is easy to fix or ignore. A wrong event lands on a
+calendar you and Mer both see, possibly with the wrong date, time, or
+person's calendar — a worse class of mistake, so this feature gets a
+review step chores never needed. `POST /api/calendar/events/parse` only
+ever reads the sentence (via the same Claude tool-use pattern as
+`choreParser.js`) and returns a draft — nothing touches Google until a
+separate `POST /api/calendar/events` call, sent only after the person
+clicks "Add to calendar" on the exact preview they saw.
+
+**Scope change, so everyone needs to reconnect:** Benny requested
+`calendar.readonly` only until now. Creating events needs
+`calendar.events` too (requested alongside readonly, not instead of it —
+see `server/lib/googleClient.js`). Existing connections don't
+automatically gain the new permission; both Michael and Mer need to
+click "Connect ___'s calendar" again on `/calendar.html` to re-consent.
+Confirmed locally: an event created against an old, readonly-only
+connection fails cleanly with "Insufficient Permission" rather than
+silently doing nothing or crashing — reconnecting is what fixes it.
+
+**A real gotcha, sidestepped rather than solved:** getting a wall-clock
+time like "7pm" onto the right UTC instant normally means computing a
+timezone offset, including DST. Google's Calendar API accepts a
+timezone-naive `dateTime` plus a separate IANA `timeZone` field (e.g.
+`America/Chicago`) instead of a full offset — Benny hands over the local
+time exactly as typed and lets Google resolve it, sidestepping the DST
+math entirely rather than getting it wrong in a subtle way once a year.
+
+**Setup:** none beyond reconnecting — same `GOOGLE_CLIENT_ID`/
+`GOOGLE_CLIENT_SECRET` as Stage 2, no new environment variables.
+
+**Scoped out of v1, on purpose:**
+- **Editing or deleting events** — only creation. Google's own Calendar
+  app remains the tool for changing/canceling something already on the
+  calendar.
+- **Gmail access** — deliberately not requested in this same reconnect,
+  even though it's the same Google OAuth client. Gmail needs its own API
+  enabled and its own scopes configured on the Data Access page in
+  Google Cloud Console first; bundling an unconfigured scope into this
+  authorize call would have broken calendar reconnecting for everyone,
+  not just added Gmail. Its own dedicated stage, later.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -726,17 +775,34 @@ GitHub repo.
 12. ✅ Calendar ↔ chores digest — merged "Today" view on the homepage (see Stage 10 above)
 13. ✅ Home screen icon — proper penguin icon + standalone launch on phones (see Stage 11 above)
 14. ⏳ Home Connect (hood + dishwasher) — status only so far (see Stage 12 above); control, and confirming the OAuth scopes/refresh-token behavior against a real registered app, still to come
+15. ✅ Google Calendar write access — natural-language event entry with a preview/confirm step (see Stage 13 above). Both Michael and Mer need to reconnect their calendar to actually use it — see Stage 13's "scope change" note.
 
 ## Future feature ideas (unscheduled)
 
 Not sequenced yet — captured here so they don't get lost. See conversation
 notes for a fuller breakdown of steps/UX for each.
 
-15. 💡 Google Calendar write access — let Benny create events (starting
-    with natural-language input, reusing the chores/bills Claude
-    tool-use pattern), not just read them. Needs a broader OAuth scope
-    and re-consent from both Michael and Mer.
-16. 💡 Smart home controls, expanded — device inventory done (see
+16. 💡 Chores ↔ calendar, tighter tie-in — right now the two are linked
+    only at display time (Stage 10's "Today" digest shows both side by
+    side). Whether to go further — e.g. a chore with a due date also
+    creating/syncing a calendar event — is an open design call, not yet
+    decided. Leaning toward *not* doing this by default: it would double
+    up anything already both a chore and an event, and quietly duplicate
+    data across `chores` and Google Calendar that could drift out of
+    sync. Worth revisiting once the digest has been lived with for a
+    while and it's clear whether the side-by-side view is enough.
+17. 💡 Gmail integration (read + compose-draft-only) — decided: full read
+    access, but Benny is only ever allowed to *create drafts*, never call
+    Gmail's send API directly — a person reviews and hits send themselves
+    every time. That's a code-level constraint (the Gmail client library
+    only ever calls `drafts.create`, never `messages.send`), not just a
+    scope restriction, so the guarantee holds even though the OAuth scope
+    needed (`gmail.compose`) technically permits sending. Needs its own
+    Google Cloud Console setup first (enable the Gmail API, add its
+    scopes on the Data Access page) before it can be requested — see
+    Stage 13's note on why it wasn't bundled into the calendar-write
+    reconnect.
+18. 💡 Smart home controls, expanded — device inventory done (see
     conversation notes), broken down by integration path:
     - **Litter-Robot 4** — Whisker cloud API (community-proven via
       `pylitterbot`), same difficulty tier as Resideo/Home Connect.
@@ -757,10 +823,24 @@ notes for a fuller breakdown of steps/UX for each.
       a long history of actively cutting off third-party access.
     - **Lutron Caséta bridge** (living room ceiling lights) — parked,
       it's physically unplugged and was unreliable before that.
-17. 💡 An autonomous planning agent for the Netherlands move (~Sept
-    2027) — Dutch language study, professional networking in NL,
-    relocation logistics — connected to Gmail and able to help schedule
-    appointments. The most sensitive item here: needs careful, narrow
-    Gmail scoping (Benny explicitly does not have Gmail access today —
-    see Stage 2 above). Sequenced after #15 (calendar write) and the
-    now-built digest, since it leans on both.
+19. 💡 An autonomous agent — coordinating doctor appointments, work
+    travel, pet appointments, and contractor/vendor scheduling day to
+    day, eventually extending to the Netherlands relocation timeline
+    (~Sept 2027): Dutch language study, professional networking in NL,
+    and the broader move logistics. Depends on #15 (calendar write, now
+    built) and #17 (Gmail, not yet built). Two things this needs to
+    settle before real building starts:
+    - **Autonomy model** — "autonomous" should mean autonomous at
+      *drafting*, not at *acting*. The Gmail decision above already
+      settled this for email (draft-only, human sends); the same
+      question needs an answer for calendar events and anything else
+      this agent might do on its own initiative — propose-then-approve
+      by default is the working assumption, not yet confirmed for every
+      action type.
+    - **What "coordinate" means per category** — doctor/pet appointments,
+      travel, and vendor scheduling are three different shapes of problem
+      (a form to fill out vs. an email thread to manage vs. comparing
+      quotes), not one generic "book stuff" feature. Needs breaking into
+      concrete per-category scope before it's buildable, the same way the
+      smart home inventory turned "expand smart home controls" into a
+      real per-device plan above.
