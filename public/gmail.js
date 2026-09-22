@@ -26,6 +26,22 @@ function formatDate(dateHeader) {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+// Used for two different situations that both need the same fix: never
+// connected at all (status check says so, no API call needed to know),
+// and connected-but-missing-the-Gmail-scope (only discovered once an
+// actual Gmail call comes back 403) — either way, the fix is "reconnect,"
+// so both show the same button rather than the second case just being a
+// dead-end error message.
+function showConnectRow(label) {
+  connectRowEl.classList.remove('hidden');
+  connectRowEl.innerHTML = `
+    <p class="text-sm hl-muted mb-2">${label}</p>
+    <a href="/auth/google/${activeOwner}" class="hl-button inline-block text-center">
+      Connect ${OWNER_LABEL[activeOwner]}'s Google account
+    </a>
+  `;
+}
+
 async function loadForActiveOwner() {
   errorEl.classList.add('hidden');
   connectRowEl.classList.add('hidden');
@@ -48,16 +64,9 @@ async function loadForActiveOwner() {
 
   if (!status[activeOwner]) {
     loadingEl.classList.add('hidden');
-    connectRowEl.classList.remove('hidden');
-    connectRowEl.innerHTML = `
-      <a href="/auth/google/${activeOwner}" class="hl-button inline-block text-center">
-        Connect ${OWNER_LABEL[activeOwner]}'s Google account
-      </a>
-    `;
+    showConnectRow(`${OWNER_LABEL[activeOwner]} hasn't connected a Google account yet.`);
     return;
   }
-
-  draftSectionEl.classList.remove('hidden');
 
   let response;
   try {
@@ -72,11 +81,21 @@ async function loadForActiveOwner() {
   const data = await response.json();
   loadingEl.classList.add('hidden');
 
+  // 403 specifically means "connected, but that connection predates the
+  // Gmail scope" — same fix as never having connected at all, so it gets
+  // the same reconnect button rather than a dead-end error.
+  if (response.status === 403) {
+    showConnectRow(data.error);
+    return;
+  }
+
   if (!response.ok) {
     errorEl.textContent = data.error || 'Something went wrong loading messages.';
     errorEl.classList.remove('hidden');
     return;
   }
+
+  draftSectionEl.classList.remove('hidden');
 
   if (data.messages.length === 0) {
     messagesEmptyEl.classList.remove('hidden');

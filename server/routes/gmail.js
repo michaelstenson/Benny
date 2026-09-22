@@ -14,6 +14,18 @@ import { fetchRecentMessages, createDraft } from '../lib/gmailClient.js';
 
 export const gmailRouter = Router();
 
+// Someone who connected before Gmail's scopes existed (or before they
+// reconnect after any future scope change) has a perfectly valid token —
+// just not one covering Gmail. Google's API returns "Insufficient
+// Permission" for that, a completely different situation from a dead
+// token (clearIfDeadToken's invalid_grant case): the token doesn't need
+// clearing, the person just needs to reconnect to add the missing scope.
+// Surfaced as its own status code so the frontend can point at
+// "reconnect," not just show a bare error.
+function isInsufficientScope(err) {
+  return String(err.message).includes('Insufficient Permission');
+}
+
 // GET /api/gmail/status — same shape as /api/calendar/status, kept as
 // its own endpoint (even though it reads the same underlying connection)
 // for the same reason every other integration in this app has its own
@@ -57,6 +69,11 @@ gmailRouter.get('/gmail/messages', async (req, res) => {
     if (await clearIfDeadToken(owner, err)) {
       return res.status(401).json({ error: `${owner}'s connection has expired — reconnect it.` });
     }
+    if (isInsufficientScope(err)) {
+      return res
+        .status(403)
+        .json({ error: `${owner}'s Google connection doesn't include Gmail access yet — reconnect to add it.` });
+    }
     console.error('[gmail] failed to fetch messages:', err.message);
     res.status(500).json({ error: 'Could not load recent messages.' });
   }
@@ -88,6 +105,11 @@ gmailRouter.post('/gmail/drafts', async (req, res) => {
   } catch (err) {
     if (await clearIfDeadToken(owner, err)) {
       return res.status(401).json({ error: `${owner}'s connection has expired — reconnect it.` });
+    }
+    if (isInsufficientScope(err)) {
+      return res
+        .status(403)
+        .json({ error: `${owner}'s Google connection doesn't include Gmail access yet — reconnect to add it.` });
     }
     console.error('[gmail] failed to create draft:', err.message);
     res.status(500).json({ error: 'Could not create that draft.' });
