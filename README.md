@@ -789,6 +789,69 @@ walks that back.
 
 **Setup:** none beyond what Stage 14 already required.
 
+## Stage 16: Timeline — a linear chores+events view, and a 6-week month grid
+
+Adds `/timeline.html` with two toggled views, replacing the idea of one
+"calendar+chores" view with two purpose-built ones — a scrolling
+chronological list for "what's coming up," and a compact grid for "what
+does the next month and a half look like."
+
+**Timeline view:** open chores (including anything overdue, no matter
+how late — an unresolved chore doesn't age out) merged chronologically
+with **timed** calendar events only. All-day events are deliberately
+excluded here — they don't have a specific time to sort by, and mixing
+them into a time-ordered list would misrepresent them as happening at a
+particular moment. New route: `GET /api/timeline`, distinct from
+`/api/digest` (Stage 10) — the digest stays today-only for the homepage
+glance; this is the fuller 60-day-ahead view for its own page.
+
+**Month view:** a rolling 6-week grid — one week before the current
+week, the current week, and four weeks ahead (42 days, Sunday-start).
+Each day shows all-day event titles as text (expanded across every day
+a multi-day event spans, not just its start date) and a small colored
+dot per owner who has at least one *timed* event that day — presence
+only, not details, matching how compact this view is meant to be. New
+route: `GET /api/calendar/month`.
+
+**Shared plumbing:** `calendar.js`'s event-fetching was refactored —
+`fetchEventsForOwner()` (next N upcoming, used by `/calendar.html` and
+the homepage digest) and the new `fetchEventsInRange()` (everything in
+an explicit date window, used by both new views here) now share one
+`listEvents()` call underneath instead of duplicating the Google API
+call and event-shaping logic.
+
+**A real gotcha, caught before it shipped:** converting an all-day
+event's date (e.g. `"2026-09-25"`, no time component) through
+`new Date(...)` and a timezone-aware formatter is exactly the bug
+`chores.js`'s `formatDueDate()` already has a comment warning about —
+UTC midnight on that date, converted to Chicago time, lands on the
+*previous* calendar day. The month grid avoids this entirely for
+all-day events by using Google's date string directly rather than
+round-tripping it through `Date`; only timed events (which carry a real
+instant, not just a date) go through the timezone conversion.
+
+**Verified against real calendar data:** cross-checked the month grid's
+placement of a yearly-recurring event against the already-proven
+`/api/calendar/events` endpoint to confirm no off-by-one day error, and
+confirmed the timeline correctly excludes all 4 of the household's
+current all-day events (two birthdays, an anniversary, a multi-day
+vacation) while including all of its timed ones. Checked at mobile
+width (375px) too — dense but legible, matching how real calendar apps
+handle the same 7-column tradeoff.
+
+**Setup:** none — no new environment variables, no new Supabase table,
+reads from the same Google connection and `chores` table everything
+else already uses.
+
+**Scoped out of v1, on purpose:**
+- **No navigation in the month view** — it's always "1 week back, 4
+  weeks ahead of today," recalculated fresh each time you open it.
+  Paging to an arbitrary past/future month wasn't asked for and would
+  be a different, bigger feature.
+- **No chores in the month view** — only Michael's spec for this view
+  (all-day titles + timed-event dots) made it in; chores stay a
+  Timeline-view-only concept for now.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -888,22 +951,23 @@ GitHub repo.
 14. ⏳ Home Connect (hood + dishwasher) — status only so far (see Stage 12 above); control, and confirming the OAuth scopes/refresh-token behavior against a real registered app, still to come
 15. ✅ Google Calendar write access — natural-language event entry with a preview/confirm step (see Stage 13 above). Both Michael and Mer need to reconnect their calendar to actually use it — see Stage 13's "scope change" note.
 16. ✅ Gmail (read-only + draft-only compose) — fully wired up (see Stages 14-15 above). Both Michael and Mer need to reconnect via `/calendar.html` to actually use it — the same one reconnect now grants Calendar write and Gmail together. Confirmed working live: real drafts create successfully and show up on `/drafts.html`, which never surfaces inbox content — only Benny's own drafts.
+17. ✅ Timeline — linear chores+timed-events view, plus a rolling 6-week month grid (see Stage 16 above). Verified against real calendar data.
 
 ## Future feature ideas (unscheduled)
 
 Not sequenced yet — captured here so they don't get lost. See conversation
 notes for a fuller breakdown of steps/UX for each.
 
-17. 💡 Chores ↔ calendar, tighter tie-in — right now the two are linked
-    only at display time (Stage 10's "Today" digest shows both side by
-    side). Whether to go further — e.g. a chore with a due date also
-    creating/syncing a calendar event — is an open design call, not yet
-    decided. Leaning toward *not* doing this by default: it would double
-    up anything already both a chore and an event, and quietly duplicate
-    data across `chores` and Google Calendar that could drift out of
-    sync. Worth revisiting once the digest has been lived with for a
-    while and it's clear whether the side-by-side view is enough.
-18. 💡 Smart home controls, expanded — device inventory done (see
+18. 💡 Chores ↔ calendar, *data* tie-in (as opposed to just a shared
+    view) — Stage 16's Timeline gave chores and calendar events a real
+    merged view, which covers what was actually asked for. Still not
+    done, and still an open design call: whether a chore with a due date
+    should also create/sync an actual calendar event. Leaning toward
+    *not* doing this by default — it would double up anything already
+    both a chore and an event, and quietly duplicate data across
+    `chores` and Google Calendar that could drift out of sync. Worth
+    revisiting once the Timeline view has been lived with for a while.
+19. 💡 Smart home controls, expanded — device inventory done (see
     conversation notes), broken down by integration path:
     - **Litter-Robot 4** — Whisker cloud API (community-proven via
       `pylitterbot`), same difficulty tier as Resideo/Home Connect.
@@ -924,13 +988,13 @@ notes for a fuller breakdown of steps/UX for each.
       a long history of actively cutting off third-party access.
     - **Lutron Caséta bridge** (living room ceiling lights) — parked,
       it's physically unplugged and was unreliable before that.
-19. 💡 An autonomous agent — coordinating doctor appointments, work
+20. 💡 An autonomous agent — coordinating doctor appointments, work
     travel, pet appointments, and contractor/vendor scheduling day to
     day, eventually extending to the Netherlands relocation timeline
     (~Sept 2027): Dutch language study, professional networking in NL,
-    and the broader move logistics. Depends on #15 (calendar write, now
-    built) and #16 (Gmail, code built but not yet reachable — see Stage
-    14). Two things this needs to settle before real building starts:
+    and the broader move logistics. Depends on #15 (calendar write) and
+    #16 (Gmail) — both now fully built. Two things this needs to settle
+    before real building starts:
     - **Autonomy model** — "autonomous" should mean autonomous at
       *drafting*, not at *acting*. The Gmail decision above already
       settled this for email (draft-only, human sends); the same

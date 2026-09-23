@@ -26,6 +26,7 @@ import { smarthomeRouter } from './server/routes/smarthome.js';
 import { adviceRouter } from './server/routes/advice.js';
 import { digestRouter } from './server/routes/digest.js';
 import { gmailRouter } from './server/routes/gmail.js';
+import { timelineRouter } from './server/routes/timeline.js';
 
 // __dirname doesn't exist in ES modules by default, so we rebuild it —
 // this is the standard way to do it in a "type": "module" project.
@@ -59,6 +60,7 @@ app.use('/api', smarthomeRouter);
 app.use('/api', adviceRouter);
 app.use('/api', digestRouter);
 app.use('/api', gmailRouter);
+app.use('/api', timelineRouter);
 
 // The Google/Resideo sign-in handshakes live under /auth instead of /api,
 // since they're browser redirect flows, not JSON endpoints.

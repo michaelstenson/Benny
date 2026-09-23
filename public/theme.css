@@ -291,3 +291,73 @@ input[type='checkbox'] {
 }
 .hl-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
 .hl-dot-sm { width: 7px; height: 7px; }
+
+/* Timeline page: view toggle + the month grid */
+.hl-view-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--hl-panel);
+  border: 1px solid var(--hl-border);
+}
+.hl-view-toggle-btn {
+  padding: 6px 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--hl-text-faint);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.hl-view-toggle-btn.active {
+  background: var(--hl-gold);
+  color: #211f2b;
+}
+
+.hl-month-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  margin-bottom: 4px;
+}
+.hl-month-weekday {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--hl-label);
+  text-align: center;
+  font-weight: 700;
+}
+.hl-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+.hl-month-cell {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--hl-border);
+  border-radius: 8px;
+  padding: 3px;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+.hl-month-cell.is-today { border-color: var(--hl-gold); box-shadow: 0 0 0 1px var(--hl-gold); }
+.hl-month-cell.is-past { opacity: 0.55; }
+.hl-month-date {
+  font-size: 10px;
+  color: var(--hl-text-faint);
+  font-weight: 700;
+}
+.hl-month-cell.is-today .hl-month-date { color: var(--hl-gold); }
+.hl-month-allday {
+  font-size: 8.5px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hl-month-dots { display: flex; gap: 2px; margin-top: auto; }
