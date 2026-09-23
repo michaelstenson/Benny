@@ -2,8 +2,10 @@ const ownerTabs = document.querySelectorAll('.owner-tab');
 const errorEl = document.getElementById('error');
 const connectRowEl = document.getElementById('connect-row');
 const loadingEl = document.getElementById('loading');
-const messagesEl = document.getElementById('messages');
-const messagesEmptyEl = document.getElementById('messages-empty');
+const draftsHeaderEl = document.getElementById('drafts-header');
+const openGmailDraftsEl = document.getElementById('open-gmail-drafts');
+const draftsEl = document.getElementById('drafts');
+const draftsEmptyEl = document.getElementById('drafts-empty');
 const draftSectionEl = document.getElementById('draft-section');
 const draftForm = document.getElementById('draft-form');
 const draftStatusEl = document.getElementById('draft-status');
@@ -19,11 +21,12 @@ function setActiveTab() {
   });
 }
 
-function formatDate(dateHeader) {
-  if (!dateHeader) return '';
-  const date = new Date(dateHeader);
-  if (Number.isNaN(date.getTime())) return dateHeader;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+function formatDate(isoString) {
+  return new Date(isoString).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 // Used for two different situations that both need the same fix: never
@@ -45,8 +48,9 @@ function showConnectRow(label) {
 async function loadForActiveOwner() {
   errorEl.classList.add('hidden');
   connectRowEl.classList.add('hidden');
-  messagesEl.classList.add('hidden');
-  messagesEmptyEl.classList.add('hidden');
+  draftsHeaderEl.classList.add('hidden');
+  draftsEl.classList.add('hidden');
+  draftsEmptyEl.classList.add('hidden');
   draftSectionEl.classList.add('hidden');
   loadingEl.classList.remove('hidden');
   loadingEl.textContent = 'Loading...';
@@ -70,7 +74,7 @@ async function loadForActiveOwner() {
 
   let response;
   try {
-    response = await fetch(`/api/gmail/messages?owner=${encodeURIComponent(activeOwner)}`);
+    response = await fetch(`/api/gmail/drafts?owner=${encodeURIComponent(activeOwner)}`);
   } catch (err) {
     loadingEl.classList.add('hidden');
     errorEl.textContent = `Could not reach the backend: ${err.message}`;
@@ -90,26 +94,27 @@ async function loadForActiveOwner() {
   }
 
   if (!response.ok) {
-    errorEl.textContent = data.error || 'Something went wrong loading messages.';
+    errorEl.textContent = data.error || 'Something went wrong loading drafts.';
     errorEl.classList.remove('hidden');
     return;
   }
 
   draftSectionEl.classList.remove('hidden');
+  draftsHeaderEl.classList.remove('hidden');
+  openGmailDraftsEl.href = 'https://mail.google.com/mail/u/0/#drafts';
 
-  if (data.messages.length === 0) {
-    messagesEmptyEl.classList.remove('hidden');
+  if (data.drafts.length === 0) {
+    draftsEmptyEl.classList.remove('hidden');
     return;
   }
 
-  messagesEl.classList.remove('hidden');
-  messagesEl.innerHTML = data.messages
+  draftsEl.classList.remove('hidden');
+  draftsEl.innerHTML = data.drafts
     .map(
-      (m) => `
+      (d) => `
     <li class="py-3">
-      <p class="font-medium">${m.subject}</p>
-      <p class="text-sm hl-muted mt-0.5">${m.from || ''}${m.date ? ' · ' + formatDate(m.date) : ''}</p>
-      ${m.snippet ? `<p class="text-sm hl-dim mt-1">${m.snippet}</p>` : ''}
+      <p class="font-medium">${d.subject}</p>
+      <p class="text-sm hl-muted mt-0.5">To: ${d.to_address} · ${formatDate(d.created_at)}</p>
     </li>
   `
     )
@@ -150,6 +155,7 @@ draftForm.addEventListener('submit', async (event) => {
       draftStatusEl.textContent =
         `Draft created in ${OWNER_LABEL[activeOwner]}'s Gmail — nothing was sent. Go check Drafts to confirm.`;
       draftForm.reset();
+      loadForActiveOwner(); // re-pull so the new draft shows up in the list above
     }
   } catch (err) {
     draftStatusEl.textContent = `Could not reach the backend: ${err.message}`;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Benny — Gmail</title>
+  <title>Benny — Drafts</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
   <link rel="apple-touch-icon" href="/icons/icon-180.png" />
@@ -30,14 +30,15 @@
             <ellipse cx="60" cy="118" rx="7" ry="4" fill="#F4ECD8"/>
           </svg>
         </div>
-        <h1 class="hl-h1">Gmail</h1>
+        <h1 class="hl-h1">Drafts</h1>
       </div>
       <a href="/" class="hl-back">← home</a>
     </div>
 
     <p class="hl-subtitle mb-5">
-      Benny can read your inbox and create drafts — it never sends anything.
-      You always review and hit send yourself, in Gmail.
+      Benny can read your inbox for automation, but never shows it here —
+      only a record of drafts Benny itself has written for you to review
+      and send yourself, in Gmail.
     </p>
 
     <!-- Owner switcher -->
@@ -51,9 +52,12 @@
 
     <p id="loading" class="hl-muted text-sm">Loading...</p>
 
-    <h2 class="hl-label mb-2">Recent messages</h2>
-    <ul id="messages" class="hidden hl-divide mb-8"></ul>
-    <p id="messages-empty" class="hidden hl-muted text-sm mb-8">No recent messages found.</p>
+    <div id="drafts-header" class="hidden flex items-center justify-between mb-2">
+      <h2 class="hl-label">Drafts Benny has written</h2>
+      <a id="open-gmail-drafts" href="#" target="_blank" rel="noopener" class="text-xs">Open in Gmail →</a>
+    </div>
+    <ul id="drafts" class="hidden hl-divide mb-8"></ul>
+    <p id="drafts-empty" class="hidden hl-muted text-sm mb-8">Benny hasn't drafted anything yet.</p>
 
     <div id="draft-section" class="hidden">
       <h2 class="hl-label mb-2">Create a test draft</h2>
@@ -70,6 +74,6 @@
     </div>
   </main>
 
-  <script src="/gmail.js"></script>
+  <script src="/drafts.js"></script>
 </body>
 </html>

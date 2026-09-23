@@ -752,9 +752,42 @@ Supabase table.
   *does* with Gmail access (drafting a reply to a vendor, surfacing an
   appointment confirmation) depends on the autonomous agent, which isn't
   scoped yet either — see the roadmap.
-- **No message search/filtering** — just the most recent N messages, to
-  prove the connection. Anything more targeted (a specific label, a
-  specific sender) waits for a real use case to shape it.
+- **No inbox content surfaced anywhere in the UI** — see Stage 15, which
+  walked this back on purpose after first shipping a "recent messages"
+  list.
+
+## Stage 15: Gmail — stop displaying the inbox, only Benny's own drafts
+
+Stage 14 originally included a "recent messages" list on the Gmail page,
+reading straight from `fetchRecentMessages()`. Michael clarified after
+using it: the ask was for Benny to *have* Gmail access for future
+automation, not to display any inbox content in the app. This stage
+walks that back.
+
+**What changed:**
+- The page (renamed `/drafts.html`, was `/gmail.html`) no longer calls
+  `fetchRecentMessages()` at all. That function and the underlying
+  `gmail.readonly` scope are still there — kept specifically for future
+  server-side automation (an agent reading a vendor's reply, say) — but
+  nothing in the UI reads or displays inbox content anymore.
+- The only Gmail content a person ever sees is a list of drafts **Benny
+  itself created**, and it's sourced from a new Supabase table
+  (`gmail_drafts` — RLS on, no public policies, same treatment as
+  `chores`/`bills`) rather than a live Gmail API call. `POST
+  /api/gmail/drafts` records `{ id, owner, to_address, subject,
+  created_at }` there right after Gmail confirms the draft was created.
+  This is a deliberately stronger guarantee than "the UI just doesn't
+  call that endpoint" — even if something in a future feature *did* list
+  every draft in the mailbox, this page still only shows what's in
+  Benny's own table, never anything a person drafted themselves.
+- An "Open in Gmail →" link points at the Drafts folder generally
+  (`mail.google.com/mail/u/0/#drafts`) rather than deep-linking a
+  specific draft — Gmail doesn't have a documented, stable URL format
+  for that, so this doesn't try to be clever about it.
+- The homepage tile is now "Drafts," not "Gmail" — the label matches
+  what the page actually shows.
+
+**Setup:** none beyond what Stage 14 already required.
 
 ## Deploying to Vercel
 
@@ -854,7 +887,7 @@ GitHub repo.
 13. ✅ Home screen icon — proper penguin icon + standalone launch on phones (see Stage 11 above)
 14. ⏳ Home Connect (hood + dishwasher) — status only so far (see Stage 12 above); control, and confirming the OAuth scopes/refresh-token behavior against a real registered app, still to come
 15. ✅ Google Calendar write access — natural-language event entry with a preview/confirm step (see Stage 13 above). Both Michael and Mer need to reconnect their calendar to actually use it — see Stage 13's "scope change" note.
-16. ✅ Gmail (read-only + draft-only compose) — fully wired up (see Stage 14 above). Both Michael and Mer need to reconnect via `/calendar.html` to actually use it — the same one reconnect now grants Calendar write and Gmail together.
+16. ✅ Gmail (read-only + draft-only compose) — fully wired up (see Stages 14-15 above). Both Michael and Mer need to reconnect via `/calendar.html` to actually use it — the same one reconnect now grants Calendar write and Gmail together. Confirmed working live: real drafts create successfully and show up on `/drafts.html`, which never surfaces inbox content — only Benny's own drafts.
 
 ## Future feature ideas (unscheduled)
 
