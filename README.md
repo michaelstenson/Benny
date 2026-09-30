@@ -1296,7 +1296,7 @@ below (the autonomous agent) was waiting on.
 19. ✅ **Shared lists** (see the Stage 19 section above; confirmed working from Discord) — `lists` + `list_items` tables, groceries first.
     Low stakes and used every day, which makes it the right first test of
     the bridge ("Benny, add oat milk").
-20. ⏳ **Morning brief** (code built, see the Stage 20 section above) — extend `/api/digest` with bills due soon and
+20. ✅ **Morning brief** (see the Stage 20 section above; posting daily at 7:00 from Hermes) — extend `/api/digest` with bills due soon and
     weather (Open-Meteo, no API key needed). Hermes pulls it on its own
     schedule and posts it to Discord; the app stays the data layer and
     the agent does the talking. Needs a new `recurring_bills` table
