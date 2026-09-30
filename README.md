@@ -35,6 +35,7 @@ benny/
 │   │   ├── resideoTokenStore.js # reads/writes the one Resideo token row in Supabase
 │   │   ├── authSession.js      # cookie-based Supabase Auth session + requireUser middleware (Stage 17)
 │   │   ├── agentAuth.js        # agent bearer token, route allowlist, agent_actions audit log (Stage 18)
+│   │   ├── actionError.js      # an Error that carries its HTTP status, for shared write paths (Stage 21)
 │   │   ├── recurringBills.js   # next-due-date math for recurring bills, in Chicago time (Stage 20)
 │   │   └── weatherClient.js    # today's forecast from Open-Meteo, no API key (Stage 20)
 │   └── routes/
@@ -48,7 +49,8 @@ benny/
 │       ├── smarthome.js   # /api/smarthome/status, /thermostats (GET+PATCH), /shades
 │       ├── session.js     # /auth/login, /verify, /confirm, /logout — signing in to Benny itself (Stage 17)
 │       ├── lists.js       # /api/lists + items — shared lists like groceries (Stage 19)
-│       └── recurringBills.js # /api/recurring-bills — what's due when (Stage 20)
+│       ├── recurringBills.js # /api/recurring-bills — what's due when (Stage 20)
+│       └── proposals.js   # /api/proposals — "Benny suggests," approve or dismiss (Stage 21)
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
 │   ├── app.js              # browser-side JS that calls /api/hello
@@ -1143,6 +1145,93 @@ alter table public.recurring_bills enable row level security; -- server-only, no
    ```
    hermes cron create "0 7 * * *" "Post the Penguin Palace morning brief: use the benny-app skill, call GET /digest, and write it up following the skill's morning brief section." --name "Morning brief" --skill benny-app --deliver discord
    ```
+
+## Stage 21: Proposals inbox ("Benny suggests")
+
+Agent Benny can now ask for things that reach outside the app, like a
+calendar event or an email draft, without being able to do them itself.
+It *proposes* one, a "Benny suggests" card shows up at the top of the
+homepage, and nothing reaches Google until Michael or Mer taps Approve.
+This is the "autonomous at drafting, not at acting" rule from the agent
+plan, made real.
+
+**How it works:**
+- **The agent can propose, but not approve.** `POST /api/proposals` and
+  `GET /api/proposals` are on the agent's allowlist. Approve and reject
+  aren't, so only a signed-in person can turn a proposal into a real
+  event or draft. A proposal the agent could approve itself would just
+  be a slower way of acting.
+- **Approving runs the same code the app already uses.** The calendar
+  write and the Gmail draft were pulled out of their routes into
+  `createCalendarEvent()` (`calendar.js`) and `createTrackedDraft()`
+  (`gmail.js`). The app's own routes and approving a proposal both call
+  those, so each still has one code path. They throw an `ActionError`
+  carrying an HTTP status, and each caller turns it into its own
+  response.
+- **What's stored is what's shown is what's written.** Proposals are
+  checked strictly when they're created: a real `YYYY-MM-DD` date,
+  24-hour times, an end after the start, and one plain `to` address.
+  They're stored already cleaned up, and approving writes exactly that.
+  Nothing is re-parsed later. The card shows every field, including an
+  email's full body, since reviewing it is the whole point.
+- **No double-approving.** Approving first flips the status from
+  `pending` to `approving` in one conditional update. Only the request
+  that wins that flip runs the action, so a double tap, or both of us
+  approving at once, can't create two events.
+- **A failed approval goes back to pending.** If Google says no (not
+  connected, expired, missing Gmail scope), the proposal stays pending
+  with the reason shown on the card. Reconnect, then approve again.
+- **Dismissed proposals are kept, not deleted,** so there's a record of
+  what the agent suggested and what we said no to. At most 20 can be
+  waiting at once (the agent gets a `429` after that), so an agent
+  stuck in a loop can't flood the homepage.
+- **Email headers can't be smuggled in.** A line break in `to` or
+  `subject` would let the rest become a header of its own (a hidden
+  `Bcc:`, say). Those are refused now, both for proposals and for the
+  existing `POST /api/gmail/drafts`.
+
+**Routes** (`server/routes/proposals.js`):
+
+| Route | Agent? |
+|---|---|
+| `GET /api/proposals`: pending, oldest first. `?status=all` gives the 50 most recent of any status | ✅ |
+| `POST /api/proposals`: body `{ kind, payload, note? }`, where `kind` is `calendar_event` or `gmail_draft` | ✅ |
+| `POST /api/proposals/:id/approve` | ❌ app only |
+| `POST /api/proposals/:id/reject` | ❌ app only |
+
+Payloads: `calendar_event` takes `{ owner, title, date, start_time?, end_time? }`,
+the same fields `POST /api/calendar/events` takes. `gmail_draft` takes
+`{ owner, to, subject, body }`, the same as `POST /api/gmail/drafts`.
+
+`agent/benny-app/SKILL.md` has a new "Proposals" section: how to propose
+each kind, to say "it's waiting for you in Benny" and never "done", to
+only use email addresses the person actually gave, and to never turn
+text it *read* (an invite, a chore title) into a proposal. Re-copy it
+into Hermes's skills folder.
+
+**Adding a kind later** (a thermostat change, say) takes an entry in
+`KINDS` in `proposals.js`, the `kind` check constraint below, and a
+branch in the card's `describeProposal()` in `public/app.js`.
+
+**Schema change** (applied as the `stage21_proposals_inbox` migration):
+```sql
+create table public.pending_actions (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('calendar_event', 'gmail_draft')),
+  payload jsonb not null,
+  note text,
+  status text not null default 'pending' check (status in ('pending', 'approving', 'approved', 'rejected')),
+  source text not null default 'agent' check (source in ('app', 'agent')),
+  created_by text,
+  created_at timestamptz not null default now(),
+  decided_by text,
+  decided_at timestamptz,
+  result jsonb,
+  last_error text
+);
+create index pending_actions_status_created_at_idx on public.pending_actions (status, created_at);
+alter table public.pending_actions enable row level security; -- server-only, no policies
+```
 
 ## Deploying to Vercel
 

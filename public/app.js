@@ -128,3 +128,149 @@ async function loadDigest() {
 }
 
 loadDigest();
+
+// --- Benny suggests (Stage 21): proposals waiting on a yes or no ---
+//
+// Everything a proposal says came from the agent, which may be relaying
+// text someone else wrote (an email, an invite), so every field goes
+// through escapeHtml() — and the card shows exactly what approving will
+// write, since that's the whole point of the review.
+
+const proposalsEl = document.getElementById('proposals');
+const proposalsListEl = document.getElementById('proposals-list');
+
+// "19:00" -> "7:00 PM", without going through a Date (and a timezone).
+function formatClock(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+// A plain "YYYY-MM-DD" read as local noon, so it can't slip to the
+// previous day the way parsing it as UTC midnight would.
+function formatDay(dateStr) {
+  return new Date(`${dateStr}T12:00:00`).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function whose(owner) {
+  return `${PERSON_META[owner]?.label ?? owner}'s`;
+}
+
+function describeProposal({ kind, payload: p }) {
+  if (kind === 'calendar_event') {
+    const time = p.start_time
+      ? `${formatClock(p.start_time)}${p.end_time ? `–${formatClock(p.end_time)}` : ''}`
+      : 'All day';
+    return {
+      owner: p.owner,
+      heading: `Add to ${whose(p.owner)} calendar`,
+      detail: `
+        <p class="hl-dim">${escapeHtml(p.title)}</p>
+        <p class="text-xs hl-muted">${formatDay(p.date)} · ${time}</p>
+      `,
+    };
+  }
+  if (kind === 'gmail_draft') {
+    return {
+      owner: p.owner,
+      heading: `Save a draft in ${whose(p.owner)} Gmail (not sent)`,
+      detail: `
+        <p class="text-xs hl-muted">To ${escapeHtml(p.to)}</p>
+        <p class="hl-dim">${escapeHtml(p.subject)}</p>
+        <p class="text-sm hl-muted mt-1 whitespace-pre-wrap">${escapeHtml(p.body)}</p>
+      `,
+    };
+  }
+  return { owner: null, heading: `Unknown proposal (${escapeHtml(kind)})`, detail: '' };
+}
+
+function proposalRow(proposal) {
+  const { owner, heading, detail } = describeProposal(proposal);
+  return `
+    <li class="py-3 flex items-start gap-2" data-id="${escapeHtml(proposal.id)}">
+      ${personDot(owner)}
+      <div class="flex-1 min-w-0">
+        <p class="text-xs hl-label">${heading}</p>
+        ${detail}
+        ${proposal.note ? `<p class="text-xs hl-muted mt-1">Why: ${escapeHtml(proposal.note)}</p>` : ''}
+        <p class="proposal-status text-xs mt-2 ${proposal.last_error ? 'hl-error' : 'hidden'}">
+          ${proposal.last_error ? `Last try didn't work: ${escapeHtml(proposal.last_error)}` : ''}
+        </p>
+        <div class="proposal-actions flex items-center gap-4 mt-2">
+          <button type="button" class="hl-button" data-decide="approve">Approve</button>
+          <button type="button" class="hl-back" data-decide="reject">Dismiss</button>
+        </div>
+      </div>
+    </li>
+  `;
+}
+
+function doneMessage(proposal) {
+  const p = proposal.payload;
+  if (proposal.status === 'rejected') return 'Dismissed.';
+  if (proposal.kind === 'calendar_event') {
+    const link = proposal.result?.htmlLink;
+    return `✓ Added to ${whose(p.owner)} calendar${
+      link ? ` · <a href="${escapeHtml(link)}" target="_blank" rel="noopener">open it</a>` : ''
+    }`;
+  }
+  if (proposal.kind === 'gmail_draft') {
+    return `✓ Draft saved in ${whose(p.owner)} Gmail — open it there to review and send.`;
+  }
+  return '✓ Done.';
+}
+
+async function decideProposal(row, decision) {
+  const statusEl = row.querySelector('.proposal-status');
+  const buttons = row.querySelectorAll('button');
+  buttons.forEach((b) => (b.disabled = true));
+  statusEl.className = 'proposal-status text-xs mt-2 hl-muted';
+  statusEl.textContent = decision === 'approve' ? 'Working on it…' : 'Dismissing…';
+
+  try {
+    const response = await fetch(`/api/proposals/${row.dataset.id}/${decision}`, { method: 'POST' });
+    const data = await response.json();
+    if (!response.ok) {
+      statusEl.className = 'proposal-status text-xs mt-2 hl-error';
+      statusEl.textContent = data.error || 'That didn’t work.';
+      // 409 = someone already handled it; nothing left to press.
+      if (response.status !== 409) buttons.forEach((b) => (b.disabled = false));
+      return;
+    }
+    row.querySelector('.proposal-actions').remove();
+    statusEl.className = 'proposal-status text-xs mt-2 hl-down';
+    statusEl.innerHTML = doneMessage(data.proposal);
+  } catch (err) {
+    statusEl.className = 'proposal-status text-xs mt-2 hl-error';
+    statusEl.textContent = `Could not reach the backend: ${err.message}`;
+    buttons.forEach((b) => (b.disabled = false));
+  }
+}
+
+proposalsListEl.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-decide]');
+  if (button) decideProposal(button.closest('li'), button.dataset.decide);
+});
+
+async function loadProposals() {
+  try {
+    const response = await fetch('/api/proposals');
+    if (!response.ok) return; // the card just stays hidden
+    const { proposals } = await response.json();
+    proposalsListEl.innerHTML = proposals.map(proposalRow).join('');
+    proposalsEl.classList.toggle('hidden', proposals.length === 0);
+  } catch {
+    // Same as above — no card beats a broken one.
+  }
+}
+
+loadProposals();
+
+// Coming back to the tab picks up anything Benny proposed in the meantime
+// (same approach as the lists page).
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') loadProposals();
+});

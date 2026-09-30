@@ -19,6 +19,7 @@ import { authenticatedClientFor, clearIfDeadToken } from '../lib/googleClient.js
 import { loadTokens, OWNERS } from '../lib/tokenStore.js';
 import { supabaseAdmin } from '../lib/supabaseClient.js';
 import { createDraft } from '../lib/gmailClient.js';
+import { ActionError } from '../lib/actionError.js';
 
 export const gmailRouter = Router();
 
@@ -80,6 +81,49 @@ gmailRouter.get('/gmail/drafts', async (req, res) => {
   }
 });
 
+// Creates a DRAFT in one person's Gmail — never sends — and records it
+// in gmail_drafts so it shows up on the Drafts page. Shared by POST
+// /api/gmail/drafts below and by approving a "Benny suggests" proposal
+// (proposals.js, Stage 21). Throws ActionError for the cases a person
+// can fix (reconnect, missing scope, bad header text).
+export async function createTrackedDraft({ owner, to, subject, body }) {
+  // A line break in a header field would let the text after it become a
+  // header of its own (a sneaked-in "Bcc:", say). Nothing legitimate
+  // needs one, and once the agent can propose drafts, these fields can
+  // come from text someone else wrote.
+  if (/[\r\n]/.test(to) || /[\r\n]/.test(subject)) {
+    throw new ActionError(400, '"to" and "subject" must be a single line.');
+  }
+
+  const tokens = await loadTokens(owner);
+  if (!tokens?.refresh_token) {
+    throw new ActionError(401, `${owner}'s Gmail isn't connected yet.`);
+  }
+
+  try {
+    const oauth2Client = authenticatedClientFor(owner, tokens);
+    const draft = await createDraft(oauth2Client, { to, subject, body });
+
+    const { error } = await supabaseAdmin
+      .from('gmail_drafts')
+      .insert({ id: draft.id, owner, to_address: to, subject });
+    if (error) throw error;
+
+    return { id: draft.id };
+  } catch (err) {
+    if (await clearIfDeadToken(owner, err)) {
+      throw new ActionError(401, `${owner}'s connection has expired — reconnect it.`);
+    }
+    if (isInsufficientScope(err)) {
+      throw new ActionError(
+        403,
+        `${owner}'s Google connection doesn't include Gmail access yet — reconnect to add it.`
+      );
+    }
+    throw err;
+  }
+}
+
 // POST /api/gmail/drafts — body { owner, to, subject, body }. Creates a
 // DRAFT in that owner's Gmail — never sends — and records it in
 // gmail_drafts so it shows up in the list above. This exists right now
@@ -96,29 +140,10 @@ gmailRouter.post('/gmail/drafts', async (req, res) => {
   }
 
   try {
-    const tokens = await loadTokens(owner);
-    if (!tokens?.refresh_token) {
-      return res.status(401).json({ error: `${owner}'s Gmail isn't connected yet.` });
-    }
-
-    const oauth2Client = authenticatedClientFor(owner, tokens);
-    const draft = await createDraft(oauth2Client, { to, subject, body });
-
-    const { error } = await supabaseAdmin
-      .from('gmail_drafts')
-      .insert({ id: draft.id, owner, to_address: to, subject });
-    if (error) throw error;
-
-    res.status(201).json({ draft: { id: draft.id } });
+    const draft = await createTrackedDraft({ owner, to, subject, body });
+    res.status(201).json({ draft });
   } catch (err) {
-    if (await clearIfDeadToken(owner, err)) {
-      return res.status(401).json({ error: `${owner}'s connection has expired — reconnect it.` });
-    }
-    if (isInsufficientScope(err)) {
-      return res
-        .status(403)
-        .json({ error: `${owner}'s Google connection doesn't include Gmail access yet — reconnect to add it.` });
-    }
+    if (err instanceof ActionError) return res.status(err.status).json({ error: err.message });
     console.error('[gmail] failed to create draft:', err.message);
     res.status(500).json({ error: 'Could not create that draft.' });
   }

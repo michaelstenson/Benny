@@ -29,6 +29,7 @@ import { gmailRouter } from './server/routes/gmail.js';
 import { timelineRouter } from './server/routes/timeline.js';
 import { listsRouter } from './server/routes/lists.js';
 import { recurringBillsRouter } from './server/routes/recurringBills.js';
+import { proposalsRouter } from './server/routes/proposals.js';
 import { sessionRouter } from './server/routes/session.js';
 import { requireUser } from './server/lib/authSession.js';
 
@@ -83,6 +84,7 @@ app.use('/api', gmailRouter);
 app.use('/api', timelineRouter);
 app.use('/api', listsRouter);
 app.use('/api', recurringBillsRouter);
+app.use('/api', proposalsRouter);
 
 // GET /api/me — who's signed in. auth-guard.js calls this on every page
 // load; for Benny the agent it's a cheap "is my token working?" check.

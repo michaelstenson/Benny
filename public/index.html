@@ -71,6 +71,14 @@
       </div>
     </div>
 
+    <!-- Benny suggests (Stage 21): proposals from the agent waiting on a
+         yes or no. Hidden unless something is waiting; filled in by app.js. -->
+    <div id="proposals" class="hl-inset mt-10 hidden" style="border-color:var(--hl-gold);">
+      <p class="hl-label mb-1">🐧 Benny suggests</p>
+      <p class="text-xs hl-muted mb-3">Nothing happens until one of you approves it.</p>
+      <ul id="proposals-list" class="hl-divide"></ul>
+    </div>
+
     <!-- Today: merged calendar + chores digest, filled in by app.js -->
     <div class="hl-inset mt-10">
       <p class="hl-label mb-3">Today</p>

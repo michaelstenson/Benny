@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import { authenticatedClientFor, clearIfDeadToken } from '../lib/googleClient.js';
 import { loadTokens, OWNERS } from '../lib/tokenStore.js';
 import { parseEventText } from '../lib/calendarEventParser.js';
+import { ActionError } from '../lib/actionError.js';
 
 export const calendarRouter = Router();
 
@@ -179,6 +180,35 @@ calendarRouter.post('/calendar/events/parse', async (req, res) => {
   }
 });
 
+// Writes one event to someone's Google Calendar, exactly as given — no
+// parsing, no guessing. Shared by POST /api/calendar/events below and by
+// approving a "Benny suggests" proposal (proposals.js, Stage 21), so
+// there's one code path that writes to a calendar. Throws ActionError
+// for the "reconnect" cases so each caller can pick its own response.
+export async function createCalendarEvent({ owner, title, date, start_time, end_time }) {
+  const tokens = await loadTokens(owner);
+  if (!tokens?.refresh_token) {
+    throw new ActionError(401, `${owner}'s calendar isn't connected yet.`);
+  }
+
+  const oauth2Client = authenticatedClientFor(owner, tokens);
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+  const { start, end } = buildEventTimes({ date, start_time, end_time });
+
+  try {
+    const { data } = await calendar.events.insert({
+      calendarId: 'primary',
+      requestBody: { summary: title, start, end },
+    });
+    return { id: data.id, htmlLink: data.htmlLink };
+  } catch (err) {
+    if (await clearIfDeadToken(owner, err)) {
+      throw new ActionError(401, `${owner}'s calendar connection has expired — reconnect it.`);
+    }
+    throw err;
+  }
+}
+
 // POST /api/calendar/events — actually creates the event, once the person
 // has reviewed the /parse preview and confirmed it. Body: the already-
 // confirmed { owner, title, date, start_time?, end_time? } fields (not
@@ -195,25 +225,10 @@ calendarRouter.post('/calendar/events', async (req, res) => {
   }
 
   try {
-    const tokens = await loadTokens(owner);
-    if (!tokens?.refresh_token) {
-      return res.status(401).json({ error: `${owner}'s calendar isn't connected yet.` });
-    }
-
-    const oauth2Client = authenticatedClientFor(owner, tokens);
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    const { start, end } = buildEventTimes({ date, start_time, end_time });
-
-    const { data } = await calendar.events.insert({
-      calendarId: 'primary',
-      requestBody: { summary: title, start, end },
-    });
-
-    res.status(201).json({ event: { id: data.id, htmlLink: data.htmlLink } });
+    const event = await createCalendarEvent({ owner, title, date, start_time, end_time });
+    res.status(201).json({ event });
   } catch (err) {
-    if (await clearIfDeadToken(owner, err)) {
-      return res.status(401).json({ error: `${owner}'s calendar connection has expired — reconnect it.` });
-    }
+    if (err instanceof ActionError) return res.status(err.status).json({ error: err.message });
     console.error('[calendar] failed to create event:', err.message);
     res.status(500).json({ error: 'Could not add that to the calendar.' });
   }

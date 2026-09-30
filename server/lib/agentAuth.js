@@ -12,9 +12,10 @@ import { supabaseAdmin } from './supabaseClient.js';
 
 // Every route the agent may call, relative to /api. Anything not listed
 // here gets a 403 even with a valid token — new routes are closed to the
-// agent by default and have to be opened on purpose. Calendar, Gmail and
-// smart-home stay off this list until the proposals inbox (Stage 21)
-// exists, per the "autonomous at drafting, not at acting" rule.
+// agent by default and have to be opened on purpose. Calendar writes,
+// Gmail drafts and smart-home stay off this list for good, per the
+// "autonomous at drafting, not at acting" rule: the agent proposes those
+// through the proposals inbox (Stage 21) and one of us approves them.
 const AGENT_ROUTES = [
   { method: 'GET', path: /^\/me$/ },
   { method: 'GET', path: /^\/digest$/ },
@@ -28,6 +29,11 @@ const AGENT_ROUTES = [
   { method: 'GET', path: /^\/lists\/[a-z0-9-]+\/items$/ },
   { method: 'POST', path: /^\/lists\/[a-z0-9-]+\/items$/ },
   { method: 'PATCH', path: /^\/list-items\/[0-9a-f-]{36}$/ },
+  // Proposals inbox (Stage 21): propose and check on proposals. Approve
+  // and reject are left off on purpose — only a signed-in person can
+  // turn a proposal into a real calendar event or Gmail draft.
+  { method: 'GET', path: /^\/proposals$/ },
+  { method: 'POST', path: /^\/proposals$/ },
 ];
 
 export function isAgentRoute(method, path) {
