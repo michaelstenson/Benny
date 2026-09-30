@@ -943,7 +943,7 @@ GitHub repo.
 6. ✅ Deployed live to Vercel
 7. ✅ Home sale comps tracker — confirmed working live (RentCast free tier)
 8. ✅ Visual redesign — "Harbor Lights" direction chosen and implemented (dark, neon edge-glow, family-color accents), shared across every page via `public/theme.css`
-9. Pet vet visit / treatment / food scheduling
+9. Pet vet visit / treatment / food scheduling — now planned as Stage 23 of the agent integration plan below
 10. ⚠️ Smart home awareness — Resideo thermostat status + control code is built (see Stage 8), but currently **non-functional in both prod and local dev**: `RESIDEO_CLIENT_ID`/`RESIDEO_CLIENT_SECRET`/`RESIDEO_REDIRECT_URI` were never set on this Vercel project, and re-registering is currently blocked — the Honeywell/Resideo developer account exists but won't send verification/password-reset emails and refuses fresh signup as "already taken." Try a different email address or network before giving up; may need Resideo support. PowerView shades bridge (Raspberry Pi + `powerview-bridge/`) also still needs the `npm run discover` verification step once the Pi is set up — and separately, the `powerview_shades` table it writes to doesn't actually exist in Supabase yet (see Stage 12's note).
 11. ✅ AI advice generator — calm, mindfulness-oriented guidance + a matching haiku, dancing penguin loading state (see Stage 9 above)
 12. ✅ Calendar ↔ chores digest — merged "Today" view on the homepage (see Stage 10 above)
@@ -952,6 +952,97 @@ GitHub repo.
 15. ✅ Google Calendar write access — natural-language event entry with a preview/confirm step (see Stage 13 above). Both Michael and Mer need to reconnect their calendar to actually use it — see Stage 13's "scope change" note.
 16. ✅ Gmail (read-only + draft-only compose) — fully wired up (see Stages 14-15 above). Both Michael and Mer need to reconnect via `/calendar.html` to actually use it — the same one reconnect now grants Calendar write and Gmail together. Confirmed working live: real drafts create successfully and show up on `/drafts.html`, which never surfaces inbox content — only Benny's own drafts.
 17. ✅ Timeline — linear chores+timed-events view, plus a rolling 6-week month grid (see Stage 16 above). Verified against real calendar data.
+
+## Agent integration plan (Stages 17–25)
+
+Benny the *agent* (built on Hermes, talking to us in Discord) and Benny
+the *app* were always meant to work together: the agent is the
+conversational layer, the app is the data and visual layer. This plan
+came out of a Discord exchange where agent Benny reviewed the app and
+suggested features; the order below is adjusted for what the code
+actually looks like today. It's also the concrete breakdown that idea #20
+below (the autonomous agent) was waiting on.
+
+### Three ground rules this plan is built on
+
+1. **Login comes first.** Right now `index.js` mounts every `/api` route
+   with no auth check — only the comps cron checks a secret. Anyone with
+   the Vercel URL can add chores, create real Google Calendar events,
+   create Gmail drafts, and spend Claude API credits. RLS doesn't help
+   here, because those routes use `supabaseAdmin`, which bypasses it.
+   Publishing an agent-facing API on top of that would make it worse, so
+   Stage 17 fixes it before anything else.
+2. **The agent calls Benny's API, not Supabase directly.** The only
+   Supabase key that could write these tables is `service_role`, and that
+   same key can read `google_tokens`, `resideo_tokens`, and
+   `home_connect_tokens` — i.e. full Calendar and Gmail access for both
+   of us, held by a process that reads Discord messages. Going through
+   the app's own REST API with a scoped agent token instead reuses the
+   existing parsers (`choreParser`, `billParser`, `calendarEventParser`)
+   and the Chicago-timezone handling in `digest.js`, and puts every agent
+   write through one place we can log and audit.
+3. **Autonomous at drafting, not at acting** (the rule idea #20 already
+   set). The agent may write low-stakes data directly — chores, list
+   items, notes. Anything that reaches outside the app — calendar
+   invites, email drafts, smart-home commands, anything involving money —
+   is a *proposal* one of us approves in the app.
+
+### Stages
+
+17. **Add a login** — Supabase Auth magic-link sign-in for Michael and
+    Mer, plus `requireUser` middleware on `/api/*`. OAuth callbacks and
+    cron routes stay outside it (cron keeps using `CRON_SECRET`). Open
+    question: magic link (leaning this way) vs. a simple shared password.
+18. **Agent API bridge** — a `BENNY_AGENT_TOKEN` bearer token with its own
+    middleware and an explicit allowlist of routes the agent may call.
+    Add `source` (`app` / `agent`) and `created_by` columns to chores (and
+    to later tables as they're built), plus an `agent_actions` audit log.
+    Write a small tool-definition file for Hermes covering chores,
+    timeline, digest, and lists. Open question: where Hermes runs — it
+    only needs outbound HTTPS to Vercel, but the token has to be stored
+    safely on that machine.
+19. **Shared lists** — `lists` + `list_items` tables, groceries first.
+    Low stakes and used every day, which makes it the right first test of
+    the bridge ("Benny, add oat milk").
+20. **Morning brief** — extend `/api/digest` with bills due soon and
+    weather (Open-Meteo, no API key needed). Hermes pulls it on its own
+    schedule and posts it to Discord; the app stays the data layer and
+    the agent does the talking. Needs a new `recurring_bills` table
+    (name, amount, due day, autopay) — the existing `bills` table records
+    monthly usage for the analyzer and has no due dates.
+21. **Proposals inbox** — a `pending_actions` table. The agent proposes
+    something, a "Benny suggests" card appears in the app, and approving
+    it runs the existing calendar-write or Gmail-draft code path. This is
+    the core of idea #20's propose-then-approve model.
+22. **Projects module** — generic `projects`, `milestones` (owner, due
+    date, `depends_on`, status), and `decisions` (a log of what's decided
+    vs. still open) tables. Milestones show up on the Timeline, and the
+    agent posts a weekly project review. Kept generic on purpose so the
+    Netherlands move (~Sept 2027) and the home sale are both just
+    projects.
+23. **Pet care** (roadmap #9) — `pets`, `vet_visits`, `vaccinations`, and
+    `medications` for Poe, Rey, and Quincy. EU import timing rules become
+    milestones on the Netherlands project; start roughly 9 months before
+    the move. Verify the rules against official USDA APHIS / Dutch
+    sources before encoding them — current understanding is microchip,
+    then rabies vaccine, a 21-day wait, and a USDA-endorsed health
+    certificate within 10 days of arrival, with **no** rabies titer test
+    needed coming from the US (agent Benny's suggestion assumed one).
+24. **Money for the move** — savings goal, burn rate, projected date to
+    hit it, and USD→EUR via Frankfurter's free exchange-rate API.
+    Tracking only, not advice.
+25. **Sale readiness** — build on `home_value_estimates`: equity (needs a
+    mortgage-balance input), a list of improvements with estimated
+    return, and a timeline to list. Lives as a project under Stage 22.
+
+**Deferred: smart-home alerts and routines** ("leaving home" / "coming
+home", temperature and shade alerts). Blocked until Resideo credentials
+are sorted (roadmap #10) and the Raspberry Pi's Home Assistant install is
+decided. If Home Assistant wins, Benny should call Home Assistant's own
+REST API rather than growing the custom `powerview-bridge/`.
+
+**Also deliberately out of scope for now:** Telegram. Discord is the one
+chat channel until there's a reason for a second integration to maintain.
 
 ## Future feature ideas (unscheduled)
 
@@ -1009,3 +1100,8 @@ notes for a fuller breakdown of steps/UX for each.
       concrete per-category scope before it's buildable, the same way the
       smart home inventory turned "expand smart home controls" into a
       real per-device plan above.
+    - **Update:** the first concrete breakdown now exists — see the
+      "Agent integration plan (Stages 17–25)" section above. It settles
+      the autonomy model (direct writes for low-stakes data, proposals
+      for anything external); the per-category "coordinate" scoping for
+      appointments/travel/vendors is still open.
