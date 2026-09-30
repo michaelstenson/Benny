@@ -50,7 +50,7 @@ function choreDigestRow(chore) {
     <li class="py-2 flex items-start gap-2">
       ${personDot(chore.assignee)}
       <p class="${chore.overdue ? 'hl-up' : 'hl-dim'}">
-        ${chore.title}${chore.overdue ? ' <span class="text-xs">(overdue)</span>' : ''}
+        ${escapeHtml(chore.title)}${chore.overdue ? ' <span class="text-xs">(overdue)</span>' : ''}
       </p>
     </li>
   `;
@@ -63,7 +63,7 @@ function eventDigestRow(event) {
   return `
     <li class="py-2 flex items-start gap-2">
       ${personDot(event.owner)}
-      <p class="hl-dim">${event.title} <span class="text-xs hl-muted">· ${time}</span></p>
+      <p class="hl-dim">${escapeHtml(event.title)} <span class="text-xs hl-muted">· ${time}</span></p>
     </li>
   `;
 }

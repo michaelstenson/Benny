@@ -80,8 +80,11 @@ app.use('/api', digestRouter);
 app.use('/api', gmailRouter);
 app.use('/api', timelineRouter);
 
-// GET /api/me — who's signed in. auth-guard.js calls this on every page load.
-app.get('/api/me', (req, res) => res.json({ email: req.user.email }));
+// GET /api/me — who's signed in. auth-guard.js calls this on every page
+// load; for Benny the agent it's a cheap "is my token working?" check.
+app.get('/api/me', (req, res) =>
+  res.json({ email: req.user.email, agent: Boolean(req.user.agent) })
+);
 
 // The Google/Resideo sign-in handshakes live under /auth instead of /api,
 // since they're browser redirect flows, not JSON endpoints.

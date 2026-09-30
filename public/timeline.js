@@ -45,7 +45,7 @@ function choreRow(chore) {
     <li class="py-3 flex items-start gap-3">
       ${personDot(chore.assignee)}
       <div class="flex-1">
-        <p class="${chore.overdue ? 'hl-up' : 'hl-dim'}">${chore.title}</p>
+        <p class="${chore.overdue ? 'hl-up' : 'hl-dim'}">${escapeHtml(chore.title)}</p>
         <p class="text-xs hl-muted mt-0.5">${label} ${dueLabel} · Chore</p>
       </div>
     </li>
@@ -64,8 +64,8 @@ function eventRow(event) {
     <li class="py-3 flex items-start gap-3">
       ${personDot(event.owner)}
       <div class="flex-1">
-        <p class="hl-dim">${event.title}</p>
-        <p class="text-xs hl-muted mt-0.5">${when}${event.location ? ' · ' + event.location : ''}</p>
+        <p class="hl-dim">${escapeHtml(event.title)}</p>
+        <p class="text-xs hl-muted mt-0.5">${when}${event.location ? ' · ' + escapeHtml(event.location) : ''}</p>
       </div>
     </li>
   `;
@@ -123,7 +123,7 @@ function monthCellHtml(day, today) {
 
   const allDayHtml = day.allDayEvents
     .slice(0, 3)
-    .map((e) => `<div class="hl-month-allday" style="color:${PERSON_COLOR[e.owner] || 'var(--hl-text-dim)'}" title="${e.title}">${e.title}</div>`)
+    .map((e) => `<div class="hl-month-allday" style="color:${PERSON_COLOR[e.owner] || 'var(--hl-text-dim)'}" title="${escapeHtml(e.title)}">${escapeHtml(e.title)}</div>`)
     .join('');
   const overflowHtml =
     day.allDayEvents.length > 3 ? `<div class="hl-month-allday hl-muted">+${day.allDayEvents.length - 3} more</div>` : '';

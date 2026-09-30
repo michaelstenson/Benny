@@ -31,10 +31,11 @@ function choreRow(chore) {
         class="mt-1 chore-checkbox"
       />
       <div class="flex-1 ${chore.completed ? 'opacity-40 line-through' : ''}">
-        <p class="hl-dim">${chore.title}</p>
+        <p class="hl-dim">${escapeHtml(chore.title)}</p>
         <p class="text-xs hl-muted mt-1">
           <span class="hl-chip" style="${chipStyle}">${ASSIGNEE_LABEL[chore.assignee] || chore.assignee}</span>
           ${dueLabel ? ' · due ' + dueLabel : ''}
+          ${chore.source === 'agent' ? ' · via Benny 🐧' : ''}
         </p>
       </div>
     </li>

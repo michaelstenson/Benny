@@ -42,6 +42,9 @@ choresRouter.post('/chores', async (req, res) => {
         assignee: parsed.assignee,
         due_date: parsed.due_date,
         raw_input: text.trim(),
+        // Who added it (Stage 18): the agent, or whichever of us is signed in.
+        source: req.user.agent ? 'agent' : 'app',
+        created_by: req.user.agent ? 'agent' : req.user.email,
       })
       .select()
       .single();

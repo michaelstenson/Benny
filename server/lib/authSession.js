@@ -12,6 +12,7 @@
 // and hands us any updated cookies to write back on the response.
 
 import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr';
+import { auditAgentRequest, bearerToken, isAgentRoute, isValidAgentToken } from './agentAuth.js';
 
 // Only these people can sign in, even if someone else somehow gets a
 // Supabase user created. Comma-separated in the env var. Unset means
@@ -72,6 +73,22 @@ export async function getSignedInEmail(req, res) {
 export function requireUser({ publicPaths = [] } = {}) {
   return async (req, res, next) => {
     if (publicPaths.includes(req.path)) return next();
+
+    // Benny the agent (Stage 18): a bearer token instead of a cookie, and
+    // only for the routes on its allowlist. A request carrying a token is
+    // judged on that token alone — it never falls back to a cookie.
+    const token = req.baseUrl === '/api' ? bearerToken(req) : null;
+    if (token) {
+      if (!isValidAgentToken(token)) {
+        return res.status(401).json({ error: 'Invalid agent token.' });
+      }
+      auditAgentRequest(req, res); // every agent request is logged, even refused ones
+      if (!isAgentRoute(req.method, req.path)) {
+        return res.status(403).json({ error: "The agent isn't allowed to use this route." });
+      }
+      req.user = { email: null, agent: true };
+      return next();
+    }
 
     try {
       const email = await getSignedInEmail(req, res);

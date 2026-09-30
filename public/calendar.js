@@ -112,10 +112,10 @@ async function loadEvents() {
             ? `<span class="hl-dot flex-shrink-0" style="background:${meta.color};box-shadow:0 0 6px ${meta.color};" title="${meta.label}"></span>`
             : ''
         }
-        ${event.title}
+        ${escapeHtml(event.title)}
       </p>
       <p class="text-sm hl-muted mt-0.5">
-        ${formatWhen(event)}${event.location ? ' · ' + event.location : ''}
+        ${formatWhen(event)}${event.location ? ' · ' + escapeHtml(event.location) : ''}
       </p>
     </li>
   `;
