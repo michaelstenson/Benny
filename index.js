@@ -27,6 +27,8 @@ import { adviceRouter } from './server/routes/advice.js';
 import { digestRouter } from './server/routes/digest.js';
 import { gmailRouter } from './server/routes/gmail.js';
 import { timelineRouter } from './server/routes/timeline.js';
+import { sessionRouter } from './server/routes/session.js';
+import { requireUser } from './server/lib/authSession.js';
 
 // __dirname doesn't exist in ES modules by default, so we rebuild it —
 // this is the standard way to do it in a "type": "module" project.
@@ -35,6 +37,11 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Vercel sits in front of this app as a proxy, so the real protocol
+// (https) arrives in X-Forwarded-Proto. Trusting it is what makes
+// req.protocol say "https" — which the sign-in email's link depends on.
+app.set('trust proxy', true);
 
 // Serve everything in /public as static files (index.html, app.js, ...).
 // This is what makes visiting http://localhost:3000 load our frontend.
@@ -47,6 +54,17 @@ app.use(express.static(path.join(__dirname, 'public')));
 // this middleware reads the raw request and parses it as JSON for us.
 // hello.js and calendar.js never needed it since they're GET-only.
 app.use(express.json());
+
+// Signing in to Benny itself (Stage 17). Mounted before everything else
+// because these are the only routes that must work while signed out.
+app.use('/auth', sessionRouter);
+
+// Every /api route and every remaining /auth route (connecting Google,
+// Resideo, Home Connect) needs a signed-in Michael or Mer. The one
+// exception is the weekly comps cron: Vercel calls it with no browser
+// session, and it checks CRON_SECRET on its own instead.
+app.use('/api', requireUser({ publicPaths: ['/comps/refresh'] }));
+app.use('/auth', requireUser());
 
 // Mount our API routes under /api — so hello.js's "/hello" becomes
 // the real path "/api/hello", calendar.js's "/calendar/events" becomes
@@ -61,6 +79,9 @@ app.use('/api', adviceRouter);
 app.use('/api', digestRouter);
 app.use('/api', gmailRouter);
 app.use('/api', timelineRouter);
+
+// GET /api/me — who's signed in. auth-guard.js calls this on every page load.
+app.get('/api/me', (req, res) => res.json({ email: req.user.email }));
 
 // The Google/Resideo sign-in handshakes live under /auth instead of /api,
 // since they're browser redirect flows, not JSON endpoints.

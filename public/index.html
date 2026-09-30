@@ -18,6 +18,7 @@
        color, type, and Benny's own components. -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/theme.css" />
+  <script src="/auth-guard.js"></script>
 </head>
 <body class="hl-page min-h-screen flex items-center justify-center p-6">
   <main class="hl-card max-w-2xl w-full p-8">
@@ -55,6 +56,7 @@
       <div>
         <h2 class="hl-hero-h1">Evening, flock.<br/>Here's the nest.</h2>
         <p id="status" class="hl-subtitle mt-3 max-w-sm">Checking in with the backend...</p>
+        <button type="button" onclick="bennySignOut()" class="hl-back mt-2">Sign out</button>
       </div>
       <div class="hl-logo hl-logo-lg">
         <svg width="52" height="63" viewBox="0 0 100 122" fill="none" xmlns="http://www.w3.org/2000/svg">

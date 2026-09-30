@@ -32,7 +32,8 @@ benny/
 │   │   ├── rentcastClient.js   # calls RentCast's AVM endpoint for a home value + comps
 │   │   ├── compsSummary.js     # turns that data into a short plain-language paragraph via Claude
 │   │   ├── resideoClient.js    # talks to Resideo's thermostat API directly (no SDK)
-│   │   └── resideoTokenStore.js # reads/writes the one Resideo token row in Supabase
+│   │   ├── resideoTokenStore.js # reads/writes the one Resideo token row in Supabase
+│   │   └── authSession.js      # cookie-based Supabase Auth session + requireUser middleware (Stage 17)
 │   └── routes/
 │       ├── hello.js       # GET /api/hello — the hello-world endpoint
 │       ├── auth.js        # /auth/google + /auth/google/callback — the Google sign-in handshake
@@ -41,7 +42,8 @@ benny/
 │       ├── bills.js       # /api/bills (GET/POST) — includes the per-category summary
 │       ├── comps.js       # /api/comps (GET) + /api/comps/refresh (GET, cron-only)
 │       ├── resideoAuth.js # /auth/resideo + /auth/resideo/callback — the Resideo sign-in handshake
-│       └── smarthome.js   # /api/smarthome/status, /thermostats (GET+PATCH), /shades
+│       ├── smarthome.js   # /api/smarthome/status, /thermostats (GET+PATCH), /shades
+│       └── session.js     # /auth/login, /verify, /confirm, /logout — signing in to Benny itself (Stage 17)
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
 │   ├── app.js              # browser-side JS that calls /api/hello
@@ -54,7 +56,9 @@ benny/
 │   ├── comps.html          # the home comps page
 │   ├── comps.js            # browser-side JS that renders the estimate + comps table
 │   ├── smarthome.html      # the smart home page
-│   └── smarthome.js        # browser-side JS: thermostat status/control + shade status
+│   ├── smarthome.js        # browser-side JS: thermostat status/control + shade status
+│   ├── login.html / login.js # sign-in page: email → code (Stage 17)
+│   └── auth-guard.js       # loaded on every signed-in page; bounces to /login.html on 401
 ├── powerview-bridge/        # standalone script that runs on a Raspberry Pi at home,
 │                             # not part of the Vercel app — see its own README.md
 ├── .env.example            # template for required environment variables
@@ -852,6 +856,73 @@ else already uses.
   (all-day titles + timed-event dots) made it in; chores stay a
   Timeline-view-only concept for now.
 
+## Stage 17: Sign-in (magic link / email code)
+
+Until this stage, Benny had no login at all: every `/api` route was open
+to anyone who knew the Vercel URL — adding chores, creating real Google
+Calendar events, creating Gmail drafts, spending Claude credits. It's
+also the prerequisite for the agent bridge (Stage 18): there's no point
+giving agent Benny a scoped token while the front door is unlocked.
+
+**How it works:**
+- **Supabase Auth, passwordless.** `/login.html` asks for an email, and
+  `POST /auth/login` has Supabase send a one-time code plus a link.
+  Typing the code (`POST /auth/verify`) or tapping the link
+  (`GET /auth/confirm`) finishes sign-in. The code matters on phones:
+  the home-screen app keeps its own cookies, separate from the phone's
+  browser, so a tapped link would sign in the browser, not the app.
+- **The session is an httpOnly cookie**, managed by `@supabase/ssr`
+  (`server/lib/authSession.js`). Cookies, not a bearer token, because
+  "Connect Michael's calendar" and the other OAuth buttons are plain
+  browser navigations, which can't carry an Authorization header. The
+  cookie rides along on those as well as on every `fetch('/api/...')`.
+- **`requireUser` middleware** guards every `/api` route and every
+  `/auth` route except sign-in itself. Signed-out API calls get a 401;
+  signed-out navigations (e.g. `/auth/google/michael`) redirect to the
+  login page and come back afterward. The one public API route is
+  `/api/comps/refresh`, which Vercel's cron calls with no session and
+  which checks `CRON_SECRET` itself.
+- **`ALLOWED_EMAILS`** (comma-separated) is the list of who may sign in,
+  checked both before an email is sent and after sign-in. If it's unset,
+  nobody gets in: it fails closed, not open.
+- **Pages stay static.** Vercel's CDN serves `public/*.html` directly, so
+  the server can't gate the HTML itself, but nothing sensitive lives in
+  it. `public/auth-guard.js` (loaded first on every page except login and
+  privacy) calls `/api/me` on load and sends you to `/login.html` on any
+  401. The homepage has a **Sign out** button.
+
+**One-time setup (only you can do these, in the Supabase dashboard):**
+1. **Authentication → Sign In / Providers:** Email enabled, and turn
+   **off** "Allow new users to sign up." Benny also passes
+   `shouldCreateUser: false`, so this is a second lock.
+2. **Authentication → Users → Add user:** add Michael and Mer by email.
+3. **Authentication → URL Configuration:** Site URL
+   `https://benny-penguin-palace.vercel.app`. Add these redirect URLs:
+   `https://benny-penguin-palace.vercel.app/auth/confirm` and
+   `http://localhost:3000/auth/confirm`. If the redirect isn't listed,
+   Supabase quietly swaps in the Site URL and the email's link breaks.
+4. **Authentication → Emails → Magic Link** template: replace it with
+   something like the following, so the email has both the code and a
+   link that works in any browser:
+   ```html
+   <h2>Sign in to Benny 🐧</h2>
+   <p>Your code: <strong>{{ .Token }}</strong></p>
+   <p>Or <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email">tap here to sign in</a>.</p>
+   ```
+5. **Vercel → Settings → Environment Variables:** add `ALLOWED_EMAILS`
+   (both emails, comma-separated). Add it to your local `.env` too.
+   Do this **before** deploying Stage 17, or nobody can sign in.
+
+**Gotchas:**
+- Supabase's built-in email sender is heavily rate-limited (a few emails
+  an hour for the whole project). That's fine for two people, but
+  "Too many sign-in emails" means wait, not that something's broken.
+  Custom SMTP (Authentication → Emails → SMTP) lifts the limit if it
+  ever matters.
+- `app.set('trust proxy', true)` in `index.js` is what makes the email
+  link say `https://` on Vercel. Without it, Express only sees the
+  proxy's plain-HTTP hop.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -989,7 +1060,7 @@ below (the autonomous agent) was waiting on.
 
 ### Stages
 
-17. **Add a login** — Supabase Auth magic-link sign-in for Michael and
+17. ⏳ **Add a login** (code built, see the Stage 17 section above; waiting on the Supabase/Vercel setup) — Supabase Auth magic-link sign-in for Michael and
     Mer, plus `requireUser` middleware on `/api/*`. OAuth callbacks and
     cron routes stay outside it (cron keeps using `CRON_SECRET`). Open
     question: magic link (leaning this way) vs. a simple shared password.
