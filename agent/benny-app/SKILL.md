@@ -1,6 +1,6 @@
 ---
 name: benny-app
-description: Read and update the Penguin Palace household app (Benny) for Michael and Mer — today's digest, the upcoming timeline, and chores (list, add, complete). Use when either of them asks what's on today or coming up, asks to add or assign a chore or reminder, or says a chore is done.
+description: Read and update the Penguin Palace household app (Benny) for Michael and Mer — today's digest, the upcoming timeline, chores (list, add, complete), and shared lists like groceries (view, add, check off). Use when either of them asks what's on today or coming up, asks to add or assign a chore or reminder, says a chore is done, or wants something added to or checked off the grocery list (or another shared list).
 ---
 
 # Benny app
@@ -32,6 +32,10 @@ curl -s -H "Authorization: Bearer $BENNY_AGENT_TOKEN" "$BENNY_API_URL/me"
 | `GET /chores` | Every chore. Open ones come first, soonest due first. |
 | `POST /chores` | Add a chore from plain language. Body: `{"text": "..."}`. |
 | `PATCH /chores/{id}` | Mark a chore done or not done. Body: `{"completed": true}` or `{"completed": false}`. |
+| `GET /lists` | Every shared list: `{slug, name, open_count}`. Groceries is `groceries`. |
+| `GET /lists/{slug}/items` | A list's items. Open ones come first, in the order they were added, then checked ones. |
+| `POST /lists/{slug}/items` | Add items. Body: `{"items": ["oat milk", "eggs"]}`. |
+| `PATCH /list-items/{id}` | Check an item off (bought) or back on. Body: `{"checked": true}` or `{"checked": false}`. |
 
 A chore looks like `{id, title, assignee, due_date, completed, source, created_by, created_at}`.
 `assignee` is `michael` or `mer`. `due_date` is `YYYY-MM-DD` or null.
@@ -59,6 +63,31 @@ due date relative to today in Chicago. Two rules:
 
 Find the chore's `id` with `GET /chores` first. If more than one open
 chore could match what they said, ask which one before you PATCH it.
+
+### Shared lists (groceries)
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $BENNY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"items": ["oat milk", "eggs", "sourdough bread"]}' \
+  "$BENNY_API_URL/lists/groceries/items"
+```
+
+- **One array entry per item.** "Add milk, eggs and bread" means three
+  entries. Keep each item short and as the person said it. Include a
+  quantity only if they gave one ("2 lbs chicken thighs").
+- **Duplicates are skipped for you.** The response is
+  `{"added": [...], "skipped": [...]}`. Anything already open on the
+  list (ignoring case) comes back in `skipped`. Tell them what was
+  already there instead of claiming you added it.
+- **Default to groceries.** If they don't name a list and it sounds like
+  shopping, use `groceries`. If they name a list that isn't in `GET /lists`,
+  say so. You can't create lists.
+- **Checking off:** find the item's `id` with `GET /lists/{slug}/items`,
+  then PATCH it. "Got everything" means check off every open item, but
+  list them back first so nothing gets checked by mistake.
+- **You can't clear or delete items.** Removing checked items is done in
+  the app, on purpose.
 
 ## Limits
 

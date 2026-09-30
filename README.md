@@ -44,7 +44,8 @@ benny/
 │       ├── comps.js       # /api/comps (GET) + /api/comps/refresh (GET, cron-only)
 │       ├── resideoAuth.js # /auth/resideo + /auth/resideo/callback — the Resideo sign-in handshake
 │       ├── smarthome.js   # /api/smarthome/status, /thermostats (GET+PATCH), /shades
-│       └── session.js     # /auth/login, /verify, /confirm, /logout — signing in to Benny itself (Stage 17)
+│       ├── session.js     # /auth/login, /verify, /confirm, /logout — signing in to Benny itself (Stage 17)
+│       └── lists.js       # /api/lists + items — shared lists like groceries (Stage 19)
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
 │   ├── app.js              # browser-side JS that calls /api/hello
@@ -59,6 +60,7 @@ benny/
 │   ├── smarthome.html      # the smart home page
 │   ├── smarthome.js        # browser-side JS: thermostat status/control + shade status
 │   ├── login.html / login.js # sign-in page: email → code (Stage 17)
+│   ├── lists.html / lists.js # shared lists page — groceries, with tabs once there's more than one (Stage 19)
 │   ├── auth-guard.js       # loaded on every signed-in page; bounces to /login.html on 401
 │   └── escape.js           # escapeHtml() for titles that came from outside (Stage 18)
 ├── agent/benny-app/SKILL.md  # instructions for Benny the agent (Hermes) on using this app's API
@@ -1006,6 +1008,76 @@ alter table public.agent_actions enable row level security; -- server-only, no p
 To revoke the agent's access, delete or change `BENNY_AGENT_TOKEN` in
 Vercel and redeploy.
 
+## Stage 19: Shared lists (groceries)
+
+A shared grocery list that either of us can add to from the app, or by
+telling agent Benny in Discord ("Benny, add oat milk and eggs"). It's
+the first thing built with the agent in mind. It's low stakes and used
+every day, so it's where talking to Benny is most useful.
+
+**How it works:**
+- **Two tables, any number of lists.** `lists` (a `slug` like
+  `groceries`, and a display name) and `list_items` (text, checked,
+  `checked_at`, plus the same `source` / `created_by` as chores).
+  Groceries is the only list for now. Adding another is one row in
+  `lists`, and the page shows tabs as soon as there's more than one.
+- **No Claude parsing**, unlike chores and bills. "Oat milk" is already
+  exactly what goes on the list, so items are stored as typed. The API
+  takes an explicit array (`{"items": ["oat milk", "eggs"]}`). The app
+  splits what you type on commas, and the agent sends one entry per
+  item, so the server never guesses where one item ends.
+- **Duplicates are skipped, not doubled.** If "milk" is already open on
+  the list, adding "Milk" again is skipped (ignoring case). The response
+  says which items were skipped, and both the page and the agent tell
+  you.
+- **Checked items sink to the bottom** instead of disappearing, so a
+  mis-tap is easy to undo mid-shop. **Clear checked items** removes them
+  for good. That's the one irreversible action here, so it's app-only
+  and not on the agent's allowlist.
+- **The page refreshes when you come back to it**
+  (`visibilitychange`), so switching back to Benny mid-shop picks up
+  whatever the other person or the agent added. It isn't live-updating
+  beyond that.
+
+**Routes** (`server/routes/lists.js`):
+
+| Route | Agent? |
+|---|---|
+| `GET /api/lists`: every list, with its open-item count | ✅ |
+| `GET /api/lists/:slug/items` | ✅ |
+| `POST /api/lists/:slug/items`: body `{ items: [...] }` | ✅ |
+| `PATCH /api/list-items/:id`: body `{ checked }` | ✅ |
+| `DELETE /api/lists/:slug/items/checked` | ❌ app only |
+
+`agent/benny-app/SKILL.md` has a new "Shared lists" section for Hermes:
+one array entry per item, report skipped duplicates, default to
+groceries, and read items back before a bulk "got everything"
+check-off. Re-copy it into Hermes's skills folder whenever it changes.
+
+**Schema change** (applied as the `stage19_shared_lists` migration):
+```sql
+create table public.lists (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique check (slug ~ '^[a-z0-9-]+$'),
+  name text not null,
+  created_at timestamptz not null default now()
+);
+create table public.list_items (
+  id uuid primary key default gen_random_uuid(),
+  list_id uuid not null references public.lists(id) on delete cascade,
+  text text not null check (length(trim(text)) > 0),
+  checked boolean not null default false,
+  checked_at timestamptz,
+  source text not null default 'app' check (source in ('app', 'agent')),
+  created_by text,
+  created_at timestamptz not null default now()
+);
+create index list_items_list_id_idx on public.list_items (list_id);
+alter table public.lists enable row level security;      -- server-only, no policies
+alter table public.list_items enable row level security; -- server-only, no policies
+insert into public.lists (slug, name) values ('groceries', 'Groceries');
+```
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -1147,7 +1219,7 @@ below (the autonomous agent) was waiting on.
     Mer, plus `requireUser` middleware on `/api/*`. OAuth callbacks and
     cron routes stay outside it (cron keeps using `CRON_SECRET`). Open
     question: magic link (leaning this way) vs. a simple shared password.
-18. ⏳ **Agent API bridge** (code built, see the Stage 18 section above; waiting on the token in Vercel + Hermes) — a `BENNY_AGENT_TOKEN` bearer token with its own
+18. ✅ **Agent API bridge** (see the Stage 18 section above; confirmed working from Discord) — a `BENNY_AGENT_TOKEN` bearer token with its own
     middleware and an explicit allowlist of routes the agent may call.
     Add `source` (`app` / `agent`) and `created_by` columns to chores (and
     to later tables as they're built), plus an `agent_actions` audit log.
@@ -1155,7 +1227,7 @@ below (the autonomous agent) was waiting on.
     timeline, digest, and lists. Open question: where Hermes runs — it
     only needs outbound HTTPS to Vercel, but the token has to be stored
     safely on that machine.
-19. **Shared lists** — `lists` + `list_items` tables, groceries first.
+19. ⏳ **Shared lists** (code built, see the Stage 19 section above) — `lists` + `list_items` tables, groceries first.
     Low stakes and used every day, which makes it the right first test of
     the bridge ("Benny, add oat milk").
 20. **Morning brief** — extend `/api/digest` with bills due soon and

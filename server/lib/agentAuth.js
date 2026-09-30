@@ -22,6 +22,12 @@ const AGENT_ROUTES = [
   { method: 'GET', path: /^\/chores$/ },
   { method: 'POST', path: /^\/chores$/ },
   { method: 'PATCH', path: /^\/chores\/[0-9a-f-]{36}$/ },
+  // Shared lists (Stage 19). Clearing checked items is left off on
+  // purpose — it's the one irreversible list action, so it stays app-only.
+  { method: 'GET', path: /^\/lists$/ },
+  { method: 'GET', path: /^\/lists\/[a-z0-9-]+\/items$/ },
+  { method: 'POST', path: /^\/lists\/[a-z0-9-]+\/items$/ },
+  { method: 'PATCH', path: /^\/list-items\/[0-9a-f-]{36}$/ },
 ];
 
 export function isAgentRoute(method, path) {
