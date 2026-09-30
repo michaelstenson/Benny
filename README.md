@@ -34,7 +34,9 @@ benny/
 │   │   ├── resideoClient.js    # talks to Resideo's thermostat API directly (no SDK)
 │   │   ├── resideoTokenStore.js # reads/writes the one Resideo token row in Supabase
 │   │   ├── authSession.js      # cookie-based Supabase Auth session + requireUser middleware (Stage 17)
-│   │   └── agentAuth.js        # agent bearer token, route allowlist, agent_actions audit log (Stage 18)
+│   │   ├── agentAuth.js        # agent bearer token, route allowlist, agent_actions audit log (Stage 18)
+│   │   ├── recurringBills.js   # next-due-date math for recurring bills, in Chicago time (Stage 20)
+│   │   └── weatherClient.js    # today's forecast from Open-Meteo, no API key (Stage 20)
 │   └── routes/
 │       ├── hello.js       # GET /api/hello — the hello-world endpoint
 │       ├── auth.js        # /auth/google + /auth/google/callback — the Google sign-in handshake
@@ -45,7 +47,8 @@ benny/
 │       ├── resideoAuth.js # /auth/resideo + /auth/resideo/callback — the Resideo sign-in handshake
 │       ├── smarthome.js   # /api/smarthome/status, /thermostats (GET+PATCH), /shades
 │       ├── session.js     # /auth/login, /verify, /confirm, /logout — signing in to Benny itself (Stage 17)
-│       └── lists.js       # /api/lists + items — shared lists like groceries (Stage 19)
+│       ├── lists.js       # /api/lists + items — shared lists like groceries (Stage 19)
+│       └── recurringBills.js # /api/recurring-bills — what's due when (Stage 20)
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
 │   ├── app.js              # browser-side JS that calls /api/hello
@@ -1078,6 +1081,69 @@ alter table public.list_items enable row level security; -- server-only, no poli
 insert into public.lists (slug, name) values ('groceries', 'Groceries');
 ```
 
+## Stage 20: Morning brief (weather + bills due, posted by the agent)
+
+Every morning, agent Benny posts a short summary to our Discord home
+channel. It covers weather, today's events for both of us, chores due or
+overdue, and bills coming due. The app assembles the data and the agent
+writes the message, so the app stays the data layer and the agent does
+the talking.
+
+**What changed in the app:**
+- **`GET /api/digest` gained two fields.** `weather` has today's
+  summary, high/low in °F, and chance of precipitation. `bills_due` has
+  active recurring bills due in the next 7 days, today included. Both
+  are fetched alongside the calendar, and a failure just leaves that
+  piece out (`null` / `[]`), the same way a broken Google connection
+  already worked. The homepage Today card shows both.
+- **Weather** comes from Open-Meteo (`server/lib/weatherClient.js`),
+  which is free and needs no key or account. It uses `HOME_LATITUDE` /
+  `HOME_LONGITUDE` if set, otherwise downtown Chicago. These only need
+  to be neighborhood-close, not the house itself.
+- **Recurring bills** are a new `recurring_bills` table: name, amount
+  (blank for bills that vary), day of month due, autopay, and
+  active/paused. They're managed in a new "Recurring — what's due when"
+  section on the Bills page (`/api/recurring-bills`, app-only, not on the
+  agent's allowlist). This is separate from the existing bills log, which
+  records what each bill *was* for the analyzer. This records what comes
+  due *when*.
+- **Due-date math** is in `server/lib/recurringBills.js`. A bill due on
+  the 31st lands on the last day of shorter months, so it's never
+  skipped. Everything is computed from "today" in Chicago, using plain
+  date strings, so Vercel's UTC clock can't shift a due date by a day.
+
+**The schedule lives in Hermes, not Vercel.** It's a Hermes cron job (see
+setup below) that fires at 7:00 Central and runs agent Benny with the
+`benny-app` skill. The skill's "morning brief" section says how to write
+the message: weather first, bills not on autopay that are due soon made
+impossible to miss, no filler. Hermes runs on the laptop, so **the brief
+only posts if the laptop is on and awake at 7:00.** If that turns out to
+be unreliable, moving Hermes to an always-on machine (like the Raspberry
+Pi) is the fix.
+
+**Schema change** (applied as the `stage20_recurring_bills` migration):
+```sql
+create table public.recurring_bills (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (length(trim(name)) > 0),
+  amount numeric(10, 2) check (amount is null or amount >= 0),
+  due_day integer not null check (due_day between 1 and 31),
+  autopay boolean not null default false,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table public.recurring_bills enable row level security; -- server-only, no policies
+```
+
+**Setup:**
+1. Add your regular bills in the Bills page's Recurring section.
+2. Optionally, set `HOME_LATITUDE` / `HOME_LONGITUDE` in Vercel for a
+   closer forecast.
+3. Create the Hermes job:
+   ```
+   hermes cron create "0 7 * * *" "Post the Penguin Palace morning brief: use the benny-app skill, call GET /digest, and write it up following the skill's morning brief section." --name "Morning brief" --skill benny-app --deliver discord
+   ```
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -1227,10 +1293,10 @@ below (the autonomous agent) was waiting on.
     timeline, digest, and lists. Open question: where Hermes runs — it
     only needs outbound HTTPS to Vercel, but the token has to be stored
     safely on that machine.
-19. ⏳ **Shared lists** (code built, see the Stage 19 section above) — `lists` + `list_items` tables, groceries first.
+19. ✅ **Shared lists** (see the Stage 19 section above; confirmed working from Discord) — `lists` + `list_items` tables, groceries first.
     Low stakes and used every day, which makes it the right first test of
     the bridge ("Benny, add oat milk").
-20. **Morning brief** — extend `/api/digest` with bills due soon and
+20. ⏳ **Morning brief** (code built, see the Stage 20 section above) — extend `/api/digest` with bills due soon and
     weather (Open-Meteo, no API key needed). Hermes pulls it on its own
     schedule and posts it to Discord; the app stays the data layer and
     the agent does the talking. Needs a new `recurring_bills` table

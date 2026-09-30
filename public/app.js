@@ -31,6 +31,7 @@ checkIn();
 const digestLoadingEl = document.getElementById('digest-loading');
 const digestListEl = document.getElementById('digest-list');
 const digestEmptyEl = document.getElementById('digest-empty');
+const digestWeatherEl = document.getElementById('digest-weather');
 
 // Same family colors used everywhere else (calendar dots, chore chips) —
 // an owner/assignee here should mean the same thing it does on those pages.
@@ -68,6 +69,30 @@ function eventDigestRow(event) {
   `;
 }
 
+// Recurring bills due in the next week (Stage 20) — no person dot, since
+// a bill belongs to the household, not to one of us.
+function billDigestRow(bill) {
+  const when =
+    bill.days_until === 0 ? 'due today' : bill.days_until === 1 ? 'due tomorrow' : `due in ${bill.days_until} days`;
+  const amount =
+    bill.amount === null
+      ? ''
+      : ' · ' + new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(bill.amount);
+  return `
+    <li class="py-2 flex items-start gap-2">
+      <span class="flex-shrink-0 text-xs" title="Bill">💵</span>
+      <p class="${bill.days_until === 0 && !bill.autopay ? 'hl-up' : 'hl-dim'}">
+        ${escapeHtml(bill.name)} <span class="text-xs hl-muted">· ${when}${amount}${bill.autopay ? ' · autopay' : ''}</span>
+      </p>
+    </li>
+  `;
+}
+
+function weatherLine(weather) {
+  const rain = weather.precip_chance >= 30 ? ` · ${weather.precip_chance}% chance of precipitation` : '';
+  return `${weather.summary}, high ${weather.high_f}° / low ${weather.low_f}°${rain}`;
+}
+
 async function loadDigest() {
   try {
     const response = await fetch('/api/digest');
@@ -80,7 +105,16 @@ async function loadDigest() {
       return;
     }
 
-    const rows = [...data.chores.map(choreDigestRow), ...data.events.map(eventDigestRow)];
+    if (data.weather) {
+      digestWeatherEl.textContent = weatherLine(data.weather);
+      digestWeatherEl.classList.remove('hidden');
+    }
+
+    const rows = [
+      ...data.chores.map(choreDigestRow),
+      ...data.events.map(eventDigestRow),
+      ...(data.bills_due || []).map(billDigestRow),
+    ];
     if (rows.length === 0) {
       digestEmptyEl.classList.remove('hidden');
       return;

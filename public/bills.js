@@ -104,3 +104,109 @@ form.addEventListener('submit', async (event) => {
 });
 
 loadBills();
+
+// --- Recurring bills (Stage 20): what's due when, not what it cost ---
+
+const recurringForm = document.getElementById('recurring-form');
+const recurringStatus = document.getElementById('recurring-status');
+const recurringEl = document.getElementById('recurring');
+
+function dueLabel(bill) {
+  const date = new Date(`${bill.next_due_date}T00:00:00`).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+  if (bill.days_until === 0) return `due today (${date})`;
+  if (bill.days_until === 1) return `due tomorrow (${date})`;
+  return `due ${date} · in ${bill.days_until} days`;
+}
+
+function recurringRow(bill) {
+  const soon = bill.active && bill.days_until <= 7;
+  return `
+    <li class="py-3 flex items-center justify-between gap-3 ${bill.active ? '' : 'opacity-40'}">
+      <div>
+        <p class="hl-dim font-medium">${escapeHtml(bill.name)}${bill.autopay ? ' <span class="text-xs hl-muted">· autopay</span>' : ''}</p>
+        <p class="text-xs ${soon ? 'hl-up' : 'hl-muted'}">${bill.active ? dueLabel(bill) : `paused · the ${bill.due_day}${ordinal(bill.due_day)}`}</p>
+      </div>
+      <div class="text-right flex items-center gap-3">
+        <span class="hl-dim">${bill.amount === null ? '<span class="hl-muted text-sm">varies</span>' : currency(bill.amount)}</span>
+        <button type="button" class="hl-back text-xs" data-toggle="${bill.id}" data-active="${bill.active}">${bill.active ? 'pause' : 'resume'}</button>
+        <button type="button" class="hl-back text-xs" data-delete="${bill.id}" data-name="${escapeHtml(bill.name)}">delete</button>
+      </div>
+    </li>
+  `;
+}
+
+function ordinal(n) {
+  if (n % 100 >= 11 && n % 100 <= 13) return 'th';
+  return { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th';
+}
+
+async function loadRecurring() {
+  const response = await fetch('/api/recurring-bills');
+  const data = await response.json();
+
+  if (!response.ok) {
+    recurringEl.innerHTML = `<li class="py-4 text-sm hl-error">${escapeHtml(data.error || 'Could not load recurring bills.')}</li>`;
+    return;
+  }
+
+  recurringEl.innerHTML =
+    data.bills.length === 0
+      ? '<li class="py-2 hl-muted text-sm">Nothing recurring yet — add your regular bills above.</li>'
+      : data.bills.map(recurringRow).join('');
+
+  recurringEl.querySelectorAll('[data-toggle]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      await fetch(`/api/recurring-bills/${button.dataset.toggle}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: button.dataset.active !== 'true' }),
+      });
+      loadRecurring();
+    });
+  });
+
+  recurringEl.querySelectorAll('[data-delete]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!confirm(`Delete "${button.dataset.name}"? Pausing keeps it around instead.`)) return;
+      await fetch(`/api/recurring-bills/${button.dataset.delete}`, { method: 'DELETE' });
+      loadRecurring();
+    });
+  });
+}
+
+recurringForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const amount = document.getElementById('recurring-amount').value;
+  const body = {
+    name: document.getElementById('recurring-name').value,
+    amount: amount === '' ? null : Number(amount),
+    due_day: Number(document.getElementById('recurring-day').value),
+    autopay: document.getElementById('recurring-autopay').checked,
+  };
+
+  recurringForm.querySelector('button').disabled = true;
+  try {
+    const response = await fetch('/api/recurring-bills', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      recurringStatus.textContent = data.error || 'Something went wrong.';
+    } else {
+      recurringForm.reset();
+      recurringStatus.textContent = '';
+      loadRecurring();
+    }
+  } catch (err) {
+    recurringStatus.textContent = `Could not reach the backend: ${err.message}`;
+  } finally {
+    recurringForm.querySelector('button').disabled = false;
+  }
+});
+
+loadRecurring();
