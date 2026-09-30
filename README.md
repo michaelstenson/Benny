@@ -1060,7 +1060,7 @@ below (the autonomous agent) was waiting on.
 
 ### Stages
 
-17. ⏳ **Add a login** (code built, see the Stage 17 section above; waiting on the Supabase/Vercel setup) — Supabase Auth magic-link sign-in for Michael and
+17. ✅ **Add a login** (see the Stage 17 section above; confirmed working locally with the emailed code) — Supabase Auth magic-link sign-in for Michael and
     Mer, plus `requireUser` middleware on `/api/*`. OAuth callbacks and
     cron routes stay outside it (cron keeps using `CRON_SECRET`). Open
     question: magic link (leaning this way) vs. a simple shared password.
