@@ -113,13 +113,13 @@ export async function fetchEventsInRange(owner, { timeMin, timeMax }) {
 // GET /api/calendar/events — the real feature: merge Michael's and
 // Mer's next 20 upcoming events into one read-only, chronologically
 // sorted list. Someone who isn't connected simply contributes nothing —
-// this only ever 401s if NEITHER person is connected yet.
+// this only ever 424s if NEITHER person is connected yet.
 calendarRouter.get('/calendar/events', async (req, res) => {
   try {
     const perOwner = await Promise.all(OWNERS.map((owner) => fetchEventsForOwner(owner)));
     const anyConnected = await Promise.all(OWNERS.map((owner) => loadTokens(owner)));
     if (!anyConnected.some((tokens) => tokens?.refresh_token)) {
-      return res.status(401).json({ error: 'Google Calendar is not connected yet.' });
+      return res.status(424).json({ error: 'Google Calendar is not connected yet.' });
     }
 
     const events = perOwner

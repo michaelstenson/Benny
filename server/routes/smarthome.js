@@ -61,7 +61,7 @@ smarthomeRouter.get('/smarthome/thermostats', async (req, res) => {
   try {
     const accessToken = await getValidAccessToken();
     if (!accessToken) {
-      return res.status(401).json({ error: 'The thermostat is not connected yet.' });
+      return res.status(424).json({ error: 'The thermostat is not connected yet.' });
     }
 
     const locations = await fetchLocations(accessToken);
@@ -89,7 +89,7 @@ smarthomeRouter.patch('/smarthome/thermostats/:deviceId', async (req, res) => {
   try {
     const accessToken = await getValidAccessToken();
     if (!accessToken) {
-      return res.status(401).json({ error: 'The thermostat is not connected yet.' });
+      return res.status(424).json({ error: 'The thermostat is not connected yet.' });
     }
 
     const current = await fetchThermostat(accessToken, { locationId, deviceId });
@@ -165,7 +165,7 @@ smarthomeRouter.get('/smarthome/homeconnect/appliances', async (req, res) => {
   try {
     const accessToken = await getValidHomeConnectAccessToken();
     if (!accessToken) {
-      return res.status(401).json({ error: 'Kitchen appliances are not connected yet.' });
+      return res.status(424).json({ error: 'Kitchen appliances are not connected yet.' });
     }
 
     const appliances = await fetchAppliances(accessToken);

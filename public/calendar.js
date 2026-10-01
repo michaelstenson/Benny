@@ -77,10 +77,11 @@ async function loadEvents() {
     return;
   }
 
-  // 401 specifically means "neither of us is connected yet" — the
+  // 424 specifically means "neither of us is connected yet" (never 401,
+  // which auth-guard.js reads as "signed out of Benny") — the
   // connect buttons above already cover that, so there's nothing more
   // to show here.
-  if (response.status === 401) {
+  if (response.status === 424) {
     loadingEl.classList.add('hidden');
     return;
   }
