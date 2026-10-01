@@ -1,6 +1,6 @@
 ---
 name: benny-app
-description: Read and update the Penguin Palace household app (Benny) for Michael and Mer — today's digest, the upcoming timeline, chores (list, add, complete), shared lists like groceries (view, add, check off), and proposing calendar events or Gmail drafts for Michael or Mer to approve. Use when either of them asks what's on today or coming up, asks to add or assign a chore or reminder, says a chore is done, or wants something added to or checked off the grocery list (or another shared list), or asks for something to go on a calendar or for an email to be drafted.
+description: The ONLY way to reach Michael's and Mer's Google Calendar and Gmail — use this, not google-workspace, for any calendar event or email draft for either of them. Adding an event or drafting an email means proposing it here for them to approve in the app. Also reads and updates the Penguin Palace household app (Benny) — today's digest, the upcoming timeline, chores (list, add, complete), and shared lists like groceries (view, add, check off). Use when either of them asks to put something on a calendar, schedule something, or draft/write an email; asks what's on today or coming up; asks to add or assign a chore or reminder; says a chore is done; or wants something added to or checked off the grocery list (or another shared list).
 ---
 
 # Benny app
@@ -98,6 +98,11 @@ You can't write to a calendar or create an email draft yourself. You
 homepage, and nothing happens until Michael or Mer taps Approve. You
 can't approve or dismiss proposals. Say "I've put it in Benny for you
 to approve", never "I've added it" or "I've drafted it".
+
+This is the only route to their calendars and Gmail. The app already
+holds both Google connections. Don't use the google-workspace skill
+for them, and never ask them to set up a Google Cloud project, OAuth
+client or token for you.
 
 Body: `{"kind": "...", "payload": {...}, "note": "..."}`. `note` is
 optional: one short line on why, shown on the card.
