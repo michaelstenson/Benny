@@ -900,6 +900,10 @@ giving agent Benny a scoped token while the front door is unlocked.
   it. `public/auth-guard.js` (loaded first on every page except login and
   privacy) calls `/api/me` on load and sends you to `/login.html` on any
   401. The homepage has a **Sign out** button.
+- **401 means only "not signed in to Benny."** Because the guard bounces
+  on any `/api` 401, "this integration isn't connected yet" (calendar,
+  Gmail, thermostat, kitchen appliances) is a **424** instead, and the
+  pages check for 424 to show their connect state.
 
 **One-time setup (only you can do these, in the Supabase dashboard):**
 1. **Authentication → Sign In / Providers:** Email enabled, and turn

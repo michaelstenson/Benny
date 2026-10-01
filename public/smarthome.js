@@ -153,9 +153,10 @@ async function loadThermostats() {
     return;
   }
 
-  // 401 specifically means "not connected yet" — the connect button above
+  // 424 specifically means "not connected yet" (never 401, which
+  // auth-guard.js reads as "signed out of Benny") — the connect button above
   // already covers that, so there's nothing more to show here.
-  if (response.status === 401) {
+  if (response.status === 424) {
     loadingEl.classList.add('hidden');
     return;
   }
@@ -294,7 +295,7 @@ async function loadAppliances() {
     return; // quiet failure here — this section is secondary to the thermostat above
   }
 
-  if (response.status === 401) return;
+  if (response.status === 424) return;
 
   const data = await response.json();
   if (!response.ok) return;
