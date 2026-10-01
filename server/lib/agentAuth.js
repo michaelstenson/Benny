@@ -34,6 +34,16 @@ const AGENT_ROUTES = [
   // turn a proposal into a real calendar event or Gmail draft.
   { method: 'GET', path: /^\/proposals$/ },
   { method: 'POST', path: /^\/proposals$/ },
+  // Projects (Stage 22): the agent can read projects, add and update
+  // milestones and decisions, and pull the weekly review. Creating or
+  // archiving a project and every delete stay app-only.
+  { method: 'GET', path: /^\/projects$/ },
+  { method: 'GET', path: /^\/projects\/review$/ },
+  { method: 'GET', path: /^\/projects\/[a-z0-9-]+$/ },
+  { method: 'POST', path: /^\/projects\/[a-z0-9-]+\/milestones$/ },
+  { method: 'PATCH', path: /^\/milestones\/[0-9a-f-]{36}$/ },
+  { method: 'POST', path: /^\/projects\/[a-z0-9-]+\/decisions$/ },
+  { method: 'PATCH', path: /^\/decisions\/[0-9a-f-]{36}$/ },
 ];
 
 export function isAgentRoute(method, path) {
