@@ -52,6 +52,24 @@ function choreRow(chore) {
   `;
 }
 
+function milestoneRow(milestone) {
+  const label = milestone.overdue ? 'Overdue' : 'Due';
+  const dueLabel = new Date(`${milestone.due_date}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  return `
+    <li class="py-3 flex items-start gap-3">
+      ${personDot(milestone.owner)}
+      <div class="flex-1">
+        <p class="${milestone.overdue ? 'hl-up' : 'hl-dim'}">${escapeHtml(milestone.title)}</p>
+        <p class="text-xs hl-muted mt-0.5">${label} ${dueLabel} · <a href="/projects.html?project=${encodeURIComponent(milestone.project_slug)}" class="underline">${escapeHtml(milestone.project_name)}</a></p>
+      </div>
+    </li>
+  `;
+}
+
 function eventRow(event) {
   const when = new Date(event.start).toLocaleString(undefined, {
     weekday: 'short',
@@ -89,6 +107,7 @@ async function loadTimeline() {
     const items = [
       ...data.chores.map((c) => ({ kind: 'chore', sortKey: `${c.due_date}T00:00:00`, data: c })),
       ...data.events.map((e) => ({ kind: 'event', sortKey: e.start, data: e })),
+      ...(data.milestones || []).map((m) => ({ kind: 'milestone', sortKey: `${m.due_date}T00:00:00`, data: m })),
     ].sort((a, b) => new Date(a.sortKey) - new Date(b.sortKey));
 
     if (items.length === 0) {
@@ -98,7 +117,11 @@ async function loadTimeline() {
 
     timelineListEl.classList.remove('hidden');
     timelineListEl.innerHTML = items
-      .map((item) => (item.kind === 'chore' ? choreRow(item.data) : eventRow(item.data)))
+      .map((item) => {
+        if (item.kind === 'chore') return choreRow(item.data);
+        if (item.kind === 'milestone') return milestoneRow(item.data);
+        return eventRow(item.data);
+      })
       .join('');
   } catch (err) {
     timelineLoadingEl.classList.add('hidden');

@@ -50,7 +50,8 @@ benny/
 │       ├── session.js     # /auth/login, /verify, /confirm, /logout — signing in to Benny itself (Stage 17)
 │       ├── lists.js       # /api/lists + items — shared lists like groceries (Stage 19)
 │       ├── recurringBills.js # /api/recurring-bills — what's due when (Stage 20)
-│       └── proposals.js   # /api/proposals — "Benny suggests," approve or dismiss (Stage 21)
+│       ├── proposals.js   # /api/proposals — "Benny suggests," approve or dismiss (Stage 21)
+│       └── projects.js    # /api/projects, milestones, decisions, weekly review (Stage 22)
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
 │   ├── app.js              # browser-side JS that calls /api/hello
@@ -66,6 +67,7 @@ benny/
 │   ├── smarthome.js        # browser-side JS: thermostat status/control + shade status
 │   ├── login.html / login.js # sign-in page: email → code (Stage 17)
 │   ├── lists.html / lists.js # shared lists page — groceries, with tabs once there's more than one (Stage 19)
+│   ├── projects.html / projects.js # projects page — milestones and decisions (Stage 22)
 │   ├── auth-guard.js       # loaded on every signed-in page; bounces to /login.html on 401
 │   └── escape.js           # escapeHtml() for titles that came from outside (Stage 18)
 ├── agent/benny-app/SKILL.md  # instructions for Benny the agent (Hermes) on using this app's API
@@ -1237,6 +1239,123 @@ create index pending_actions_status_created_at_idx on public.pending_actions (st
 alter table public.pending_actions enable row level security; -- server-only, no policies
 ```
 
+## Stage 22: Projects (milestones + decisions)
+
+A generic place to plan the big, slow things: the Netherlands move
+(~Sept 2027), selling the house, anything with steps and open questions.
+It's kept generic on purpose, so each of those is just a project row.
+
+**How it works:**
+- **Three tables.** `projects` (a `slug`, name, description, `status` of
+  active / paused / done, optional `target_date`), `milestones` (title,
+  `owner` michael / mer / nobody, `due_date`, open / done, `completed_at`)
+  and `decisions` (a question, and once settled an `outcome` with who
+  and when). A small `milestone_dependencies` table records what waits on
+  what, so deleting a milestone quietly releases anything that waited on it.
+- **Dependencies are checked.** `depends_on` has to point at milestones
+  in the same project, never itself, and never form a loop (A waits on B
+  waits on A would leave both blocked forever). A milestone shows
+  `blocked: true` while anything it waits on isn't done. Finishing a
+  blocked one is still allowed; real life doesn't always go in order.
+- **Decisions are a log, not a vote.** An open question becomes decided
+  the moment it gets an outcome, stamped with who and today's date
+  (Chicago). `"outcome": null` reopens it.
+- **Milestones show up on the Timeline** next to chores and events, with
+  the project's name as a link. Same rule as chores: overdue ones stay,
+  undated ones don't, and only active projects count.
+- **The agent works directly on low-stakes data.** Per the plan's third
+  ground rule, it can add and update milestones and decisions, which
+  never leave the app. Creating or archiving a project and every delete
+  are app-only.
+- **Weekly review.** `GET /api/projects/review` is the data for the
+  agent's weekly post: for each active project, what's overdue, due in
+  the next 14 days, blocked, undated, finished in the last 7 days, and
+  which decisions are open or newly made. Like the morning brief, the
+  app supplies the data and Hermes does the talking on its own schedule.
+
+**Routes** (`server/routes/projects.js`):
+
+| Route | Agent? |
+|---|---|
+| `GET /api/projects`: every project with milestone and decision tallies | ✅ |
+| `GET /api/projects/review`: the weekly review data | ✅ |
+| `GET /api/projects/:slug`: project, milestones, decisions | ✅ |
+| `POST /api/projects`: body `{ name, description?, target_date? }` | ❌ app only |
+| `PATCH /api/projects/:slug`: name, description, target_date, status | ❌ app only |
+| `POST /api/projects/:slug/milestones`: `{ title, owner?, due_date?, depends_on? }` | ✅ |
+| `PATCH /api/milestones/:id`: title, owner, due_date, depends_on, `status` (open / done) | ✅ |
+| `DELETE /api/milestones/:id` | ❌ app only |
+| `POST /api/projects/:slug/decisions`: `{ question, outcome? }` | ✅ |
+| `PATCH /api/decisions/:id`: question, outcome (null reopens) | ✅ |
+| `DELETE /api/decisions/:id` | ❌ app only |
+
+The page is `/projects.html` (list of projects, or `?project=<slug>` for
+one), with a homepage tile. `agent/benny-app/SKILL.md` has a new
+"Projects" section, including how to write the weekly review. Re-copy it
+into Hermes's skills folder, and add a weekly schedule there (Monday
+morning suits it) that asks for the review.
+
+**Not done on purpose:** Netherlands and home-sale target dates are left
+blank (set them with "Edit details"), and no milestones are seeded. The
+pet-care and sale-readiness stages will add theirs.
+
+**Schema change** (applied as the `stage22_projects_module` migration):
+```sql
+create table public.projects (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique check (slug ~ '^[a-z0-9-]+$'),
+  name text not null check (length(trim(name)) > 0),
+  description text,
+  status text not null default 'active' check (status in ('active', 'paused', 'done')),
+  target_date date,
+  source text not null default 'app' check (source in ('app', 'agent')),
+  created_by text,
+  created_at timestamptz not null default now()
+);
+create table public.milestones (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  title text not null check (length(trim(title)) > 0),
+  owner text check (owner in ('michael', 'mer')),
+  due_date date,
+  status text not null default 'open' check (status in ('open', 'done')),
+  completed_at timestamptz,
+  source text not null default 'app' check (source in ('app', 'agent')),
+  created_by text,
+  created_at timestamptz not null default now()
+);
+create table public.milestone_dependencies (
+  milestone_id uuid not null references public.milestones(id) on delete cascade,
+  depends_on_id uuid not null references public.milestones(id) on delete cascade,
+  primary key (milestone_id, depends_on_id),
+  check (milestone_id <> depends_on_id)
+);
+create table public.decisions (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  question text not null check (length(trim(question)) > 0),
+  outcome text,
+  status text not null default 'open' check (status in ('open', 'decided')),
+  decided_on date,
+  decided_by text,
+  source text not null default 'app' check (source in ('app', 'agent')),
+  created_by text,
+  created_at timestamptz not null default now(),
+  check ((status = 'decided') = (outcome is not null))
+);
+create index milestones_project_id_idx on public.milestones (project_id);
+create index milestones_due_date_idx on public.milestones (due_date) where status = 'open';
+create index milestone_dependencies_depends_on_idx on public.milestone_dependencies (depends_on_id);
+create index decisions_project_id_idx on public.decisions (project_id);
+alter table public.projects enable row level security;               -- server-only, no policies
+alter table public.milestones enable row level security;             -- server-only, no policies
+alter table public.milestone_dependencies enable row level security; -- server-only, no policies
+alter table public.decisions enable row level security;              -- server-only, no policies
+insert into public.projects (slug, name, description) values
+  ('netherlands-move', 'Netherlands move', 'Moving the household to the Netherlands, around September 2027.'),
+  ('home-sale', 'Home sale', 'Getting the house ready to sell and listed.');
+```
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -1399,7 +1518,7 @@ below (the autonomous agent) was waiting on.
     something, a "Benny suggests" card appears in the app, and approving
     it runs the existing calendar-write or Gmail-draft code path. This is
     the core of idea #20's propose-then-approve model.
-22. **Projects module** — generic `projects`, `milestones` (owner, due
+22. ✅ **Projects module** (see the Stage 22 section above) — generic `projects`, `milestones` (owner, due
     date, `depends_on`, status), and `decisions` (a log of what's decided
     vs. still open) tables. Milestones show up on the Timeline, and the
     agent posts a weekly project review. Kept generic on purpose so the
