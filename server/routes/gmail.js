@@ -97,7 +97,7 @@ export async function createTrackedDraft({ owner, to, subject, body }) {
 
   const tokens = await loadTokens(owner);
   if (!tokens?.refresh_token) {
-    throw new ActionError(401, `${owner}'s Gmail isn't connected yet.`);
+    throw new ActionError(424, `${owner}'s Gmail isn't connected yet.`);
   }
 
   try {
@@ -112,7 +112,7 @@ export async function createTrackedDraft({ owner, to, subject, body }) {
     return { id: draft.id };
   } catch (err) {
     if (await clearIfDeadToken(owner, err)) {
-      throw new ActionError(401, `${owner}'s connection has expired — reconnect it.`);
+      throw new ActionError(424, `${owner}'s connection has expired — reconnect it.`);
     }
     if (isInsufficientScope(err)) {
       throw new ActionError(

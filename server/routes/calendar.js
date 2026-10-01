@@ -188,7 +188,7 @@ calendarRouter.post('/calendar/events/parse', async (req, res) => {
 export async function createCalendarEvent({ owner, title, date, start_time, end_time }) {
   const tokens = await loadTokens(owner);
   if (!tokens?.refresh_token) {
-    throw new ActionError(401, `${owner}'s calendar isn't connected yet.`);
+    throw new ActionError(424, `${owner}'s calendar isn't connected yet.`);
   }
 
   const oauth2Client = authenticatedClientFor(owner, tokens);
@@ -203,7 +203,7 @@ export async function createCalendarEvent({ owner, title, date, start_time, end_
     return { id: data.id, htmlLink: data.htmlLink };
   } catch (err) {
     if (await clearIfDeadToken(owner, err)) {
-      throw new ActionError(401, `${owner}'s calendar connection has expired — reconnect it.`);
+      throw new ActionError(424, `${owner}'s calendar connection has expired — reconnect it.`);
     }
     throw err;
   }
