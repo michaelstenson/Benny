@@ -1395,7 +1395,7 @@ below (the autonomous agent) was waiting on.
     the agent does the talking. Needs a new `recurring_bills` table
     (name, amount, due day, autopay) — the existing `bills` table records
     monthly usage for the analyzer and has no due dates.
-21. **Proposals inbox** — a `pending_actions` table. The agent proposes
+21. ✅ **Proposals inbox** (see the Stage 21 section above; confirmed working from Discord — Benny proposed an event, Mer approved it, it landed on her calendar) — a `pending_actions` table. The agent proposes
     something, a "Benny suggests" card appears in the app, and approving
     it runs the existing calendar-write or Gmail-draft code path. This is
     the core of idea #20's propose-then-approve model.
