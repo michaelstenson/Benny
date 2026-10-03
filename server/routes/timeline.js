@@ -1,7 +1,7 @@
-// The linear "what's next" view: open chores (including anything
-// overdue, with no lower bound — an unresolved chore stays relevant no
-// matter how late) merged chronologically with TIMED calendar events
-// only — never all-day (see /api/calendar/month for those). Distinct
+// The linear "what's next" view: open chores and move tasks with an
+// exact due date (Stage 22) (including anything overdue, with no lower
+// bound — an unresolved one stays relevant no matter how late) merged
+// chronologically with TIMED calendar events only — never all-day (see /api/calendar/month for those). Distinct
 // from /api/digest (Stage 10), which is deliberately today-only; this is
 // the fuller scrolling view for "what's coming up," not just today.
 
@@ -62,7 +62,33 @@ timelineRouter.get('/timeline', async (req, res) => {
       overdue: chore.due_date < today,
     }));
 
-    res.json({ events, chores: choresWithFlag });
+    // Open move tasks (Stage 22), same rule as chores: due on or before the
+    // cutoff, overdue ones included. Only tasks with an exact due date:
+    // a month-level task's due date is just the end of its month, which
+    // would read as a real deadline on a day-by-day view.
+    const { data: tasks, error: tasksError } = await supabaseAdmin
+      .from('tasks')
+      .select('id, code, title, owner, lead, due_date, project:projects!inner(slug, name, status)')
+      .in('status', ['todo', 'doing', 'waiting'])
+      .eq('date_precision', 'day')
+      .eq('project.status', 'active')
+      .lte('due_date', cutoff)
+      .order('due_date', { ascending: true });
+    if (tasksError) throw tasksError;
+
+    const moveTasks = (tasks || []).map((t) => ({
+      id: t.id,
+      code: t.code,
+      title: t.title,
+      // A shared task shows as its lead's, or as nobody's if it has none.
+      person: t.owner === 'both' ? t.lead : t.owner,
+      due_date: t.due_date,
+      project_slug: t.project.slug,
+      project_name: t.project.name,
+      overdue: t.due_date < today,
+    }));
+
+    res.json({ events, chores: choresWithFlag, move_tasks: moveTasks });
   } catch (err) {
     console.error('[timeline] failed to build timeline:', err.message);
     res.status(500).json({ error: 'Could not load the timeline.' });

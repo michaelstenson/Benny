@@ -1252,6 +1252,14 @@ integration plan below. The move is one project with ten workstreams, and
 the home sale is one of them (House & Money), since every date in it is
 set by the move.
 
+**This replaces the first Stage 22** (PR #2, merged Sep 30): a generic
+Projects page with milestones and dependencies, milestones on the
+Timeline, and agent access for a weekly review. Its tables were still
+empty when this stage's migration dropped them, so nothing was lost. Its
+Projects page and agent routes are gone. The Timeline now shows move
+tasks instead (below), and the agent skill is back to its pre-PR #2
+version, which is also the copy Hermes has installed.
+
 **Pages:**
 - **`/move.html`.** Key-date countdown at the top (tap one to move it),
   the "why" from F-08, and an Everyone / Michael / Mer filter that each
@@ -1266,6 +1274,10 @@ set by the move.
   them on one page.
 - **Homepage:** a move card (countdown, the next few things on this
   device's person's list, the next decision) and a tile.
+- **Timeline:** open move tasks with an exact due date sit alongside
+  chores and events, linking to the Move page. Month-level tasks stay
+  off, since their due date is just the end of the month. The agent's
+  `GET /timeline` sees these too; it's the only move data it can read.
 
 **How it works:**
 - **Owner and lead.** A task belongs to Michael, Mer or both. A "both"
@@ -1369,9 +1381,9 @@ adds `why` to `projects`, and creates the `move_key_date()` function
 (service role only). Every new table has RLS on with no policies, so it's
 server-only like the rest.
 
-**Not built yet:** agent access (see the rules above), move tasks on the
-Timeline, a documents tracker (apostilles start in December), a Summit-prep
-post in Discord, and exporting the plan as a Mermaid Gantt chart.
+**Not built yet:** agent access (see the rules above), a documents
+tracker (apostilles start in December), a Summit-prep post in Discord,
+and exporting the plan as a Mermaid Gantt chart.
 
 ## Deploying to Vercel
 
@@ -1535,17 +1547,17 @@ below (the autonomous agent) was waiting on.
     something, a "Benny suggests" card appears in the app, and approving
     it runs the existing calendar-write or Gmail-draft code path. This is
     the core of idea #20's propose-then-approve model.
-22. **Projects module** → built as the **Netherlands move tracker** (see
-    the Stage 22 section above; waiting on its migration and the roadmap
-    import). Reshaped on Oct 2, 2026 around the move roadmap: workstreams,
-    tasks with leads and date ranges, key dates that tasks are pinned to,
-    decisions with decide-by dates, and a decision log. The home sale is
-    a workstream of the move rather than its own project. Still to come:
-    move tasks on the Timeline, and the agent's weekly review once it has
-    access.
+22. ✅ **Projects module** → rebuilt as the **Netherlands move tracker**
+    (see the Stage 22 section above; migration applied and roadmap
+    imported Oct 2, 2026). It replaced the first version from PR #2
+    (generic projects + milestones). Workstreams, tasks with leads and
+    date ranges, key dates that tasks are pinned to, decisions with
+    decide-by dates, a decision log, and move tasks on the Timeline. The
+    home sale is a workstream of the move rather than its own project.
+    Still to come: the agent's weekly review once it has access.
 23. **Pet care** (roadmap #9) — `pets`, `vet_visits`, `vaccinations`, and
     `medications` for Poe, Rey, and Quincy. EU import timing rules become
-    milestones on the Netherlands project; start roughly 9 months before
+    tasks on the Netherlands move (pinned to departure); start roughly 9 months before
     the move. Verify the rules against official USDA APHIS / Dutch
     sources before encoding them — current understanding is microchip,
     then rabies vaccine, a 21-day wait, and a USDA-endorsed health
