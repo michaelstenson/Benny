@@ -88,7 +88,27 @@
       <p id="digest-empty" class="hl-muted text-sm hidden">Nothing on the books today.</p>
     </div>
 
+    <!-- Netherlands move (Stage 22): countdown + the next few things, filled
+         in by app.js. Stays hidden if the plan can't be loaded. -->
+    <a id="move-card" href="/move.html" class="hl-inset mt-6 block hidden">
+      <div class="flex items-center justify-between gap-3">
+        <p class="hl-label">Netherlands move</p>
+        <span class="hl-back">Open the plan →</span>
+      </div>
+      <p id="move-countdown" class="text-sm hl-dim mt-2"></p>
+      <ul id="move-list" class="hl-divide mt-2"></ul>
+      <p id="move-decision" class="text-xs hl-muted mt-2 hidden"></p>
+    </a>
+
     <div class="hl-tile-grid mt-10">
+
+      <a href="/move.html" class="hl-tile" style="--glow:#FDE68A;">
+        <div class="hl-tile-icon" style="background:rgba(253,230,138,0.14);color:#FDE68A;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 13.5 3 11l1.5-1.5 7.5 1 4.5-4.5c1-1 2.5-1.2 3-.7s.3 2-.7 3L14.3 12.8l1 7.5L13.8 21.8l-2.5-7.5"/><path d="M3 21h7"/></svg>
+        </div>
+        <div class="hl-tile-title">Netherlands move</div>
+        <div class="hl-tile-desc">The plan, the Summit agenda, and the decisions still to make.</div>
+      </a>
 
       <a href="/timeline.html" class="hl-tile" style="--glow:#38BDF8;">
         <div class="hl-tile-icon" style="background:rgba(56,189,248,0.14);color:#38BDF8;">
@@ -184,6 +204,7 @@
   </main>
 
   <script src="/escape.js"></script>
+  <script src="/move-shared.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

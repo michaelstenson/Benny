@@ -274,3 +274,61 @@ loadProposals();
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') loadProposals();
 });
+
+// --- Netherlands move (Stage 22): countdown + the next few things ---
+//
+// Shows this device's person (the Move page's Everyone/Michael/Mer
+// toggle): this week's focus first, then anything overdue, then what's
+// started or due in the next 30 days.
+
+const MOVE_CARD_ITEMS = 5;
+
+function moveRow(task, today) {
+  const overdue = MoveShared.isOverdue(task, today);
+  return `
+    <li class="py-2 flex items-start gap-2">
+      <span class="flex items-center gap-0.5 mt-1.5">${MoveShared.personDots(task)}</span>
+      <p class="${overdue ? 'hl-up' : 'hl-dim'} text-sm">
+        ${task.focus ? '★ ' : ''}${escapeHtml(task.title)}
+        <span class="text-xs hl-muted">· ${escapeHtml(MoveShared.whenLabel(task, today))}${overdue ? ' · overdue' : ''}</span>
+      </p>
+    </li>
+  `;
+}
+
+async function loadMoveCard() {
+  try {
+    const response = await fetch('/api/projects/netherlands-move/summary');
+    if (!response.ok) return; // no plan yet: the card stays hidden
+    const data = await response.json();
+    const person = MoveShared.getPerson();
+
+    const upcoming = data.key_dates.filter((k) => k.days_left >= 0);
+    document.getElementById('move-countdown').textContent = upcoming
+      .map((k) => `${k.days_left} days to ${k.title}`)
+      .join(' · ');
+
+    const seen = new Set();
+    const items = [
+      ...data.focus.map((t) => ({ ...t, focus: true })),
+      ...data.overdue,
+      ...data.next_30,
+    ].filter((t) => MoveShared.belongsTo(t, person) && !seen.has(t.id) && seen.add(t.id));
+    document.getElementById('move-list').innerHTML = items
+      .slice(0, MOVE_CARD_ITEMS)
+      .map((t) => moveRow(t, data.today))
+      .join('');
+
+    const decision = data.decisions_due[0];
+    if (decision) {
+      const el = document.getElementById('move-decision');
+      el.textContent = `Next decision: ${decision.code} ${decision.question}, by ${MoveShared.dayLabel(decision.decide_by, data.today)} (${MoveShared.daysLeftLabel(decision.days_left)})`;
+      el.classList.remove('hidden');
+    }
+    document.getElementById('move-card').classList.remove('hidden');
+  } catch {
+    // Same as the proposals card: no card beats a broken one.
+  }
+}
+
+loadMoveCard();

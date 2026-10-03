@@ -37,6 +37,7 @@ benny/
 │   │   ├── agentAuth.js        # agent bearer token, route allowlist, agent_actions audit log (Stage 18)
 │   │   ├── actionError.js      # an Error that carries its HTTP status, for shared write paths (Stage 21)
 │   │   ├── recurringBills.js   # next-due-date math for recurring bills, in Chicago time (Stage 20)
+│   │   ├── moveTasks.js        # move tracker rules: repeats, the Summit agenda, decision warnings (Stage 22)
 │   │   └── weatherClient.js    # today's forecast from Open-Meteo, no API key (Stage 20)
 │   └── routes/
 │       ├── hello.js       # GET /api/hello — the hello-world endpoint
@@ -50,7 +51,8 @@ benny/
 │       ├── session.js     # /auth/login, /verify, /confirm, /logout — signing in to Benny itself (Stage 17)
 │       ├── lists.js       # /api/lists + items — shared lists like groceries (Stage 19)
 │       ├── recurringBills.js # /api/recurring-bills — what's due when (Stage 20)
-│       └── proposals.js   # /api/proposals — "Benny suggests," approve or dismiss (Stage 21)
+│       ├── proposals.js   # /api/proposals — "Benny suggests," approve or dismiss (Stage 21)
+│       └── projects.js    # /api/projects, /tasks, /decisions, /key-dates, /log — the move tracker (Stage 22)
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
 │   ├── app.js              # browser-side JS that calls /api/hello
@@ -66,9 +68,13 @@ benny/
 │   ├── smarthome.js        # browser-side JS: thermostat status/control + shade status
 │   ├── login.html / login.js # sign-in page: email → code (Stage 17)
 │   ├── lists.html / lists.js # shared lists page — groceries, with tabs once there's more than one (Stage 19)
+│   ├── move.html / move.js # the Netherlands move plan + Penguin Summit agenda (Stage 22)
+│   ├── move-shared.js      # date labels + the Everyone/Michael/Mer filter, shared with the homepage card
+│   ├── log.html / log.js   # the decision log (Stage 22)
 │   ├── auth-guard.js       # loaded on every signed-in page; bounces to /login.html on 401
 │   └── escape.js           # escapeHtml() for titles that came from outside (Stage 18)
 ├── agent/benny-app/SKILL.md  # instructions for Benny the agent (Hermes) on using this app's API
+├── scripts/                 # one-time setup: the Stage 22 migration + the roadmap importer
 ├── powerview-bridge/        # standalone script that runs on a Raspberry Pi at home,
 │                             # not part of the Vercel app — see its own README.md
 ├── .env.example            # template for required environment variables
@@ -1237,6 +1243,136 @@ create index pending_actions_status_created_at_idx on public.pending_actions (st
 alter table public.pending_actions enable row level security; -- server-only, no policies
 ```
 
+## Stage 22: Netherlands move tracker
+
+The relocation roadmap (110 tasks, 8 open decisions, Oct 2026 → Sept 2027
+plus the first 90 days in NL) lives in Benny now, not in a markdown file.
+It replaces the generic "projects + milestones" plan from the agent
+integration plan below. The move is one project with ten workstreams, and
+the home sale is one of them (House & Money), since every date in it is
+set by the move.
+
+**Pages:**
+- **`/move.html`.** Key-date countdown at the top (tap one to move it),
+  the "why" from F-08, and an Everyone / Michael / Mer filter that each
+  device remembers. Below that is the **Penguin Summit agenda** (Sundays
+  at 7pm): this week's starred focus (three at most), overdue, "now and in
+  the next 30 days", waiting on someone, done in the last 7 days, and
+  decisions coming up. Then every decision, then every task by workstream.
+  Tap a task's title to edit it.
+- **`/log.html`, the decision log.** Recorded decisions, key-date
+  changes, and every "Benny suggests" proposal one of us approved or
+  dismissed, newest first. All three were already stored; this just puts
+  them on one page.
+- **Homepage:** a move card (countdown, the next few things on this
+  device's person's list, the next decision) and a tile.
+
+**How it works:**
+- **Owner and lead.** A task belongs to Michael, Mer or both. A "both"
+  task also has a lead, and it shows on the lead's list. A "both" task
+  with no lead shows on both lists. Each workstream has a default lead.
+  Changing it moves the workstream's leaderless shared tasks (and those that
+  followed the old lead) over to the new one.
+- **Date ranges.** Tasks have a start and a due date, shown as months
+  ("Nov – Jan 2027") until someone sets exact days. "Now and in the next
+  30 days" means started *or* due within 30 days. That keeps a "Q1" task
+  visible from January rather than hiding until it's due on Mar 31.
+- **Repeating tasks** (crate training, decluttering, the monthly goodbye,
+  the quarterly check-in, ...). Ticking one off moves it to its next due
+  date and counts it. Weekly ones fall on Sundays, Summit day. Each stops
+  after its "until" date.
+- **Key dates and pinned tasks.** Listing (Jun 1), Michael's last day
+  (Jun 30) and Departure (Sep 20) start out "proposed". 27 tasks are
+  pinned to one of them: the health certificates, packing, the first 90
+  days, the notice period and so on. Moving a key date moves its open
+  pinned tasks by the same number of days, after a preview of what moves.
+  The move happens in one database function (`move_key_date`) and is
+  logged.
+- **Decisions.** Each has a decide-by date, a list of options (name,
+  cost, link, notes; handy for comparing quotes), and the tasks it needs
+  first. If one of those tasks is due after the decide-by date, the
+  decision shows a ⚠. Recording D2, D3 or D5 asks for the date it sets,
+  moves the key date if that changed, and marks it confirmed.
+- **Waiting on someone.** Setting a task to "waiting" records who and
+  since when. After 7 days it turns red.
+
+**Where decisions get recorded (decided Oct 2, 2026).** The household's
+decisions and approvals go in the app (`/log.html`). They're already rows
+in the database, both of us can see them, and recording one doesn't need a
+code change. This README keeps decisions about how the app is built, like
+the agent rules below.
+
+**Agent rules for the move (agreed Oct 2, 2026).** These take effect when
+the agent gets access to the move data:
+- If one of us asks for something in Discord, the agent writes it
+  directly, the same as chores: mark a task done, set it to waiting, add a
+  note or a task.
+- If the agent wants to suggest something on its own initiative, it
+  sends a proposal for one of us to approve.
+- The agent never records a decision, moves a key date, or drops a task.
+
+For now these routes are **app-only**: none are on the agent's allowlist.
+Agent calls are billed per use and the app does the job, so the agent
+waits until there's a reason.
+
+**Changes made to the roadmap when importing it** (all listed in
+`scripts/import-roadmap.js`):
+- P-09 (pet health certificates) moved from "Aug" to Sep 10–18. The EU
+  certificate has to be issued within 10 days before arrival.
+- G-08 (book flights) moved from Aug to Apr, right after D3. Airlines cap
+  pets per flight.
+- H-16 (runway number) moved from Q2 to Dec–Jan and repeats monthly. It's
+  an input to D2, which is due Jan 31.
+- W-09 is now "plan notice for the last day set in D2" (Feb–Mar), since
+  D2 itself decides Mer's last day.
+- V-02 (intro calls) is due Nov 15, before D1's Nov 20 decide-by date.
+- A-01 to A-09 (first 90 days) got owners and dates, pinned to departure.
+- Leads: Michael leads Visa & Legal and House & Money. Mer leads Pets and
+  Logistics, plus H-05 (decluttering). The rest get a lead at a Summit.
+- F-03 is in progress (Sundays at 7pm picked; the monthly review is still
+  to pick).
+- A new task, G-11, "Move Benny too": America/Chicago is hard-coded in 5
+  server files, and the Pi the agent is moving to lives in the house being
+  sold.
+
+**Setup (once):**
+1. Run `scripts/stage22_move_tracker.sql` as the migration
+   `stage22_move_tracker`, using the Supabase SQL editor or `apply_migration`.
+   It replaces the unused tables from the first `stage22_projects_module`
+   migration and removes the separate `home-sale` project row.
+2. Import the roadmap. Do a dry run first:
+   ```bash
+   node scripts/import-roadmap.js path/to/netherlands-move-roadmap.md --dry-run
+   node scripts/import-roadmap.js path/to/netherlands-move-roadmap.md
+   ```
+   Re-running it is safe: it skips anything that already exists and never
+   overwrites edits made in the app.
+
+**Routes** (`server/routes/projects.js`, all app-only):
+
+| Route | Does |
+|---|---|
+| `GET /api/projects/:slug` | Everything, plus the Summit agenda as lists of ids |
+| `GET /api/projects/:slug/summary` | Countdown, focus, overdue, next 30 days, decisions due (the homepage card) |
+| `PATCH /api/projects/:slug` | `{ why }` |
+| `POST /api/projects/:slug/tasks` | `{ workstream, title, owner?, lead?, start_date?, due_date?, ... }`. Gets the workstream's next code, e.g. `L-07` |
+| `PATCH /api/tasks/:id` | Any task field. Marking a repeating task done rolls it forward (`rolled: true`) |
+| `PATCH /api/workstreams/:id` | `{ lead }` |
+| `PATCH /api/key-dates/:id` | `{ date, dry_run? }`. The dry run lists what would move |
+| `PATCH /api/decisions/:id` | Record (`status: 'decided'`, `outcome`, `decided_by`, `key_date?`), reopen, or edit `options` / `notes` / `decide_by` |
+| `GET /api/log` | The decision log |
+
+**Schema:** `scripts/stage22_move_tracker.sql`. It adds `workstreams`,
+`tasks`, `key_dates`, `decision_inputs` and `key_date_changes`, adds
+`code`, `decide_by`, `options`, `notes` and `key_date_id` to `decisions`,
+adds `why` to `projects`, and creates the `move_key_date()` function
+(service role only). Every new table has RLS on with no policies, so it's
+server-only like the rest.
+
+**Not built yet:** agent access (see the rules above), move tasks on the
+Timeline, a documents tracker (apostilles start in December), a Summit-prep
+post in Discord, and exporting the plan as a Mermaid Gantt chart.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -1399,12 +1535,14 @@ below (the autonomous agent) was waiting on.
     something, a "Benny suggests" card appears in the app, and approving
     it runs the existing calendar-write or Gmail-draft code path. This is
     the core of idea #20's propose-then-approve model.
-22. **Projects module** — generic `projects`, `milestones` (owner, due
-    date, `depends_on`, status), and `decisions` (a log of what's decided
-    vs. still open) tables. Milestones show up on the Timeline, and the
-    agent posts a weekly project review. Kept generic on purpose so the
-    Netherlands move (~Sept 2027) and the home sale are both just
-    projects.
+22. **Projects module** → built as the **Netherlands move tracker** (see
+    the Stage 22 section above; waiting on its migration and the roadmap
+    import). Reshaped on Oct 2, 2026 around the move roadmap: workstreams,
+    tasks with leads and date ranges, key dates that tasks are pinned to,
+    decisions with decide-by dates, and a decision log. The home sale is
+    a workstream of the move rather than its own project. Still to come:
+    move tasks on the Timeline, and the agent's weekly review once it has
+    access.
 23. **Pet care** (roadmap #9) — `pets`, `vet_visits`, `vaccinations`, and
     `medications` for Poe, Rey, and Quincy. EU import timing rules become
     milestones on the Netherlands project; start roughly 9 months before
