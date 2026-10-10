@@ -1554,6 +1554,34 @@ Re-copy the plugin and restart (`hermes gateway restart`) whenever it
 changes. Without the terminal, Benny can't run the skills that need it
 (maps, PDFs, GIF search) from chat. Images still work through `vision`.
 
+## Parsers on Claude Haiku 5.5 (Oct 2026)
+
+The chore, bill and calendar parsers, the advice generator and the comps
+summary moved from Haiku 4.5 to Haiku 5.5 (`FAST_EXTRACTION_MODEL` in
+`server/lib/anthropicClient.js`). Before switching, every parser ran on
+the same 20 inputs with both models: 4 of 4 bills, 5 of 5 events and 7 of
+8 chores came out identical, the comps summary followed its "two to
+three plain sentences" rule better, and the 20 calls cost $0.003 instead
+of $0.029.
+
+What changed with it:
+- **PDF and image reading stays on Haiku 4.5** (`TRANSCRIPTION_MODEL`).
+  On a scanned referral, Haiku 5.5 misread one character of the email
+  domain, both times; 4.5 matched the address that was checked by hand.
+- **The comps summary's `max_tokens` went from 300 to 1000.** Haiku 5.5
+  thinks before answering by default, and that counts toward the cap.
+- **`temperature: 1` is gone from the advice generator.** Haiku 5.5
+  rejects any other value, so it was a trap for a later edit.
+- **Effort stays at the default.** At "low", the chore parser dropped the
+  date from "schedule root canal next week".
+- **"Next week" is now defined** in the chore and calendar prompts as 7
+  days from today; the two models had guessed differently.
+- **Fixed: "today" came from the server's UTC clock.** After 7pm Central
+  that's already tomorrow, so "tomorrow" landed a day late (and on a
+  month's last evening, a bill's "this month" became next month). The
+  chore, calendar and bill parsers now use Chicago's date
+  (`householdToday()`), like the digest and recurring bills already did.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
