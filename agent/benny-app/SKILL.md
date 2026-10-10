@@ -27,7 +27,8 @@ curl -s -H "Authorization: Bearer $BENNY_AGENT_TOKEN" "$BENNY_API_URL/me"
 
 | Call | What it does |
 |---|---|
-| `GET /digest` | Today (America/Chicago): weather, calendar events for both people, chores due today or overdue, and recurring bills due in the next 7 days. This is what the morning brief is built from. |
+| `GET /digest` | Today (America/Chicago): weather, calendar events for both people, chores due today or overdue, and recurring bills due in the next 7 days. |
+| `GET /digest/brief` | The same day as finished Discord text: the morning brief. |
 | `GET /timeline` | The next 60 days: timed calendar events plus all open chores, including overdue ones. |
 | `GET /chores` | Every chore. Open ones come first, soonest due first. |
 | `POST /chores` | Add a chore from plain language. Body: `{"text": "..."}`. |
@@ -155,34 +156,10 @@ curl -s -X POST -H "Authorization: Bearer $BENNY_AGENT_TOKEN" \
 
 ### The morning brief
 
-A scheduled job asks you for this every morning. Call `GET /digest` and
-turn it into one short Discord message. The response looks like:
-
-```json
-{
-  "date": "2026-10-01",
-  "weather": {"summary": "Heavy rain", "high_f": 69, "low_f": 60, "precip_chance": 92},
-  "events": [{"title": "...", "start": "...", "allDay": false, "owner": "mer"}],
-  "chores": [{"title": "...", "assignee": "michael", "due_date": "...", "overdue": false}],
-  "bills_due": [{"name": "Mortgage", "amount": 2100, "autopay": true, "next_due_date": "2026-10-01", "days_until": 0}]
-}
-```
-
-`weather` can be `null` if the forecast couldn't be fetched. Leave that
-line out instead of guessing. `amount` is `null` for bills that vary.
-
-How to write it:
-- **Weather first, in one line.** Mention an umbrella only if
-  `precip_chance` is 50 or more.
-- **Then today's events, by time.** Say whose calendar each one is on.
-- **Then chores, overdue first.** Say who each one is assigned to.
-- **Then bills.** Bills not on autopay that are due today or tomorrow
-  are the most important thing in the brief, so put them where they
-  can't be missed. Bills on autopay only need a mention.
-- **Keep it short, with no headings for empty sections.** If there are
-  no events, chores or bills, say so in one line. Don't pad it.
-- **Keep your usual voice and emoji.** Don't include anything the digest
-  didn't give you, and don't give financial advice about the bills.
+The app writes it, and a 7:00 job posts `GET /digest/brief` to Discord
+without you. If someone asks for today's rundown, fetch `/digest/brief`
+and pass it along as-is instead of writing your own. Use `GET /digest`
+for a specific follow-up, like what time something starts.
 
 ## Limits
 

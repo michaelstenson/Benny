@@ -1128,10 +1128,10 @@ the talking.
 setup below) that fires at 7:00 Central and runs agent Benny with the
 `benny-app` skill. The skill's "morning brief" section says how to write
 the message: weather first, bills not on autopay that are due soon made
-impossible to miss, no filler. Hermes runs on the laptop, so **the brief
-only posts if the laptop is on and awake at 7:00.** If that turns out to
-be unreliable, moving Hermes to an always-on machine (like the Raspberry
-Pi) is the fix.
+impossible to miss, no filler. Hermes ran on the laptop, and the brief
+never once posted at 7:00: every run was a catch-up hours later, when
+the laptop woke. Hermes moved to the Raspberry Pi on Oct 9, 2026, and
+the app took over writing the brief (see Stage 20b).
 
 **Schema change** (applied as the `stage20_recurring_bills` migration):
 ```sql
@@ -1155,6 +1155,56 @@ alter table public.recurring_bills enable row level security; -- server-only, no
    ```
    hermes cron create "0 7 * * *" "Post the Penguin Palace morning brief: use the benny-app skill, call GET /digest, and write it up following the skill's morning brief section." --name "Morning brief" --skill benny-app --deliver discord
    ```
+   Stage 20b replaces this with a job that runs no model.
+
+## Stage 20b: The app writes the morning brief
+
+Agent Benny used to write the brief: a full Sonnet run every morning,
+about $0.10 each, mostly spent loading the agent's ~17K-token setup just
+to reword JSON the app had already assembled. Now the app writes the
+brief and Hermes only delivers it, so it costs nothing and comes out
+the same way every day.
+
+**How it works:**
+- **`GET /api/digest/brief`** returns the brief as finished Discord text
+  (`server/lib/morningBrief.js`), built from the same data as
+  `/api/digest`. It follows the rules the agent did: a bill that isn't
+  on autopay and is due today or tomorrow goes at the very top, then
+  weather (an umbrella only at 50%+), today's events by time, chores
+  with overdue ones first, then the rest of the week's bills. Empty
+  sections are left out. At most 8 chores are listed, with "…and N more
+  in Benny" after that. It's on the agent's allowlist.
+- **Text from the calendar and chores is defanged before posting.** An
+  invite from anyone lands on the calendar on its own, so titles are
+  kept to one line, Markdown and masked links show as plain text, and
+  `@everyone` / `<@id>` mentions are broken so a title can't ping the
+  server.
+- **Hermes runs it as a no-agent job.** `agent/scripts/morning-brief.sh`
+  fetches the brief and Hermes posts whatever it prints, with no model
+  involved. If the fetch fails, the script exits non-zero and Hermes
+  posts a failure notice rather than a blank brief.
+- **Also fixed: all-day events showed up a day early.** The digest
+  turned an all-day event's date into a `Date`, which is UTC midnight,
+  and that's still the previous day in Chicago. All-day events now
+  compare as plain dates and show on every day they cover. This also
+  fixes the homepage's Today card.
+
+The skill's "morning brief" section now just says to pass
+`/digest/brief` along as-is when someone asks for today's rundown.
+
+**Setup (on the Pi):**
+1. Copy the script and the updated skill:
+   ```
+   ssh pi 'mkdir -p ~/.hermes/scripts'
+   scp agent/scripts/morning-brief.sh pi:~/.hermes/scripts/morning-brief.sh
+   scp agent/benny-app/SKILL.md pi:~/.hermes/skills/productivity/benny-app/SKILL.md
+   ```
+2. Switch the existing job (`6c657c92b7a2`) to the script, with no model:
+   ```
+   ssh pi 'chmod +x ~/.hermes/scripts/morning-brief.sh && ~/.local/bin/hermes cron edit 6c657c92b7a2 --script morning-brief.sh --no-agent --clear-skills'
+   ```
+3. Check it with `hermes cron run 6c657c92b7a2`, which posts it on the
+   next scheduler tick (or wait for 7:00).
 
 ## Stage 21: Proposals inbox ("Benny suggests")
 
@@ -1537,7 +1587,7 @@ below (the autonomous agent) was waiting on.
 19. ✅ **Shared lists** (see the Stage 19 section above; confirmed working from Discord) — `lists` + `list_items` tables, groceries first.
     Low stakes and used every day, which makes it the right first test of
     the bridge ("Benny, add oat milk").
-20. ✅ **Morning brief** (see the Stage 20 section above; posting daily at 7:00 from Hermes) — extend `/api/digest` with bills due soon and
+20. ✅ **Morning brief** (see Stages 20 and 20b above; the app writes it, and Hermes on the Pi posts it at 7:00 with no model call) — extend `/api/digest` with bills due soon and
     weather (Open-Meteo, no API key needed). Hermes pulls it on its own
     schedule and posts it to Discord; the app stays the data layer and
     the agent does the talking. Needs a new `recurring_bills` table
@@ -1576,8 +1626,10 @@ are sorted (roadmap #10) and the Raspberry Pi's Home Assistant install is
 decided. If Home Assistant wins, Benny should call Home Assistant's own
 REST API rather than growing the custom `powerview-bridge/`.
 
-**Also deliberately out of scope for now:** Telegram. Discord is the one
-chat channel until there's a reason for a second integration to maintain.
+**Telegram is the backup channel.** Discord is where the household talks
+to Benny. Telegram stays connected (Michael only, by user ID) in case
+Discord is down, or its connection silently drops while Hermes keeps
+running. Nothing is built for Telegram on purpose.
 
 ## Future feature ideas (unscheduled)
 

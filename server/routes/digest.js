@@ -4,6 +4,7 @@ import { OWNERS } from '../lib/tokenStore.js';
 import { fetchEventsForOwner } from './calendar.js';
 import { withNextDue } from '../lib/recurringBills.js';
 import { fetchTodaysWeather } from '../lib/weatherClient.js';
+import { formatMorningBrief } from '../lib/morningBrief.js';
 
 export const digestRouter = Router();
 
@@ -32,59 +33,86 @@ function localDateString(date) {
 // nothing here for a language model to extract or generate.
 digestRouter.get('/digest', async (req, res) => {
   try {
-    const today = localDateString(new Date());
-
-    // A broken/expired Google connection shouldn't take down the whole
-    // digest — chores are unrelated to Google and should still show up.
-    // fetchEventsForOwner already treats "not connected" as "no events";
-    // this treats "connected but the token call failed" the same way,
-    // just logging it instead of surfacing an error for something that's
-    // meant to be a low-stakes glance, not a page you'd rely on.
-    //
-    // Weather and bills get the same treatment: each is fetched alongside
-    // the calendar, and a failure just leaves that piece out (null / []).
-    const [perOwnerEvents, weather, billsDue] = await Promise.all([
-      Promise.all(
-        OWNERS.map(async (owner) => {
-          try {
-            return await fetchEventsForOwner(owner, { maxResults: 30 });
-          } catch (err) {
-            console.error(`[digest] could not fetch ${owner}'s events:`, err.message);
-            return [];
-          }
-        })
-      ),
-      fetchTodaysWeather(),
-      fetchBillsDue(today),
-    ]);
-    const events = perOwnerEvents
-      .flat()
-      .filter((event) => localDateString(new Date(event.start)) === today)
-      .sort((a, b) => new Date(a.start) - new Date(b.start));
-
-    // due_date <= today, so this also naturally picks up anything
-    // overdue — chores with no due_date are excluded (NULL <= anything
-    // is never true in Postgres), which is what we want: an open-ended
-    // chore isn't "due" today just because it exists.
-    const { data: chores, error } = await supabaseAdmin
-      .from('chores')
-      .select('*')
-      .eq('completed', false)
-      .lte('due_date', today)
-      .order('due_date', { ascending: true });
-    if (error) throw error;
-
-    const choresWithFlag = (chores || []).map((chore) => ({
-      ...chore,
-      overdue: chore.due_date < today,
-    }));
-
-    res.json({ date: today, weather, events, chores: choresWithFlag, bills_due: billsDue });
+    res.json(await buildDigest());
   } catch (err) {
     console.error('[digest] failed to build digest:', err.message);
     res.status(500).json({ error: 'Could not load today\'s digest.' });
   }
 });
+
+// GET /api/digest/brief — the morning brief as finished Discord text.
+// Hermes's 7:00 job fetches this and posts it as-is, with no model call,
+// so the app writes the brief and the agent only delivers it.
+digestRouter.get('/digest/brief', async (req, res) => {
+  try {
+    res.type('text/plain').send(formatMorningBrief(await buildDigest()));
+  } catch (err) {
+    console.error('[digest] failed to build the morning brief:', err.message);
+    res.status(500).type('text/plain').send('Could not build the morning brief.');
+  }
+});
+
+// The digest itself, shared by the JSON route and the brief.
+async function buildDigest() {
+  const today = localDateString(new Date());
+
+  // A broken/expired Google connection shouldn't take down the whole
+  // digest — chores are unrelated to Google and should still show up.
+  // fetchEventsForOwner already treats "not connected" as "no events";
+  // this treats "connected but the token call failed" the same way,
+  // just logging it instead of surfacing an error for something that's
+  // meant to be a low-stakes glance, not a page you'd rely on.
+  //
+  // Weather and bills get the same treatment: each is fetched alongside
+  // the calendar, and a failure just leaves that piece out (null / []).
+  const [perOwnerEvents, weather, billsDue] = await Promise.all([
+    Promise.all(
+      OWNERS.map(async (owner) => {
+        try {
+          return await fetchEventsForOwner(owner, { maxResults: 30 });
+        } catch (err) {
+          console.error(`[digest] could not fetch ${owner}'s events:`, err.message);
+          return [];
+        }
+      })
+    ),
+    fetchTodaysWeather(),
+    fetchBillsDue(today),
+  ]);
+  const events = perOwnerEvents
+    .flat()
+    .filter((event) => isOnDay(event, today))
+    .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+  // due_date <= today, so this also naturally picks up anything
+  // overdue — chores with no due_date are excluded (NULL <= anything
+  // is never true in Postgres), which is what we want: an open-ended
+  // chore isn't "due" today just because it exists.
+  const { data: chores, error } = await supabaseAdmin
+    .from('chores')
+    .select('*')
+    .eq('completed', false)
+    .lte('due_date', today)
+    .order('due_date', { ascending: true });
+  if (error) throw error;
+
+  const choresWithFlag = (chores || []).map((chore) => ({
+    ...chore,
+    overdue: chore.due_date < today,
+  }));
+
+  return { date: today, weather, events, chores: choresWithFlag, bills_due: billsDue };
+}
+
+// An all-day event's start/end are plain dates (end exclusive, the way
+// Google sends them), so compare them as strings. new Date('2026-10-10')
+// would be UTC midnight, which is still the 9th in Chicago, and every
+// all-day event would land a day early. Comparing ranges also keeps a
+// multi-day event (a trip) on each day it covers.
+function isOnDay(event, day) {
+  if (event.allDay) return event.start <= day && day < event.end;
+  return localDateString(new Date(event.start)) === day;
+}
 
 // Active recurring bills whose next due date is within
 // BILLS_LOOKAHEAD_DAYS (today included), soonest first.

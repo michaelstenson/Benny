@@ -19,6 +19,9 @@ import { supabaseAdmin } from './supabaseClient.js';
 const AGENT_ROUTES = [
   { method: 'GET', path: /^\/me$/ },
   { method: 'GET', path: /^\/digest$/ },
+  // The morning brief as finished text, posted by a Hermes job that runs
+  // no model.
+  { method: 'GET', path: /^\/digest\/brief$/ },
   { method: 'GET', path: /^\/timeline$/ },
   { method: 'GET', path: /^\/chores$/ },
   { method: 'POST', path: /^\/chores$/ },
