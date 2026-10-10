@@ -57,7 +57,6 @@ export async function generateAdvice(question) {
   const response = await anthropic.messages.create({
     model: FAST_EXTRACTION_MODEL,
     max_tokens: 400,
-    temperature: 1,
     system:
       'You are Benny, a household assistant with a mindful, grounding side — and a little bit of a ' +
       'goofball. Someone is asking a real household question — sometimes mundane, sometimes weighing ' +

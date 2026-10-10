@@ -3,12 +3,12 @@
 // (scanned ones included, like a faxed referral) or an image goes to
 // Claude, which transcribes it. Anything else isn't supported yet.
 //
-// Uses the same small model as the chore and bill parsers: transcribing
-// a page is a narrow job, and a two-page referral costs well under a
+// Uses Haiku 4.5 (TRANSCRIPTION_MODEL), not the parsers' newer Haiku:
+// see anthropicClient.js for why. A two-page referral costs well under a
 // cent. Benny then reads the text instead of the file.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { anthropic, FAST_EXTRACTION_MODEL } from './anthropicClient.js';
+import { anthropic, TRANSCRIPTION_MODEL } from './anthropicClient.js';
 import { htmlToText } from './gmailClient.js';
 import { ActionError } from './actionError.js';
 
@@ -83,7 +83,7 @@ async function transcribe(type, data) {
 
   try {
     const response = await anthropic.messages.create({
-      model: FAST_EXTRACTION_MODEL,
+      model: TRANSCRIPTION_MODEL,
       max_tokens: 8000,
       messages: [{ role: 'user', content: [file, { type: 'text', text: TRANSCRIBE_PROMPT }] }],
     });

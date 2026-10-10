@@ -3,6 +3,7 @@
 // to have the shape our database expects.
 
 import { anthropic, FAST_EXTRACTION_MODEL } from './anthropicClient.js';
+import { HOUSEHOLD_TIMEZONE, householdToday } from './recurringBills.js';
 
 const EXTRACT_BILL_TOOL = {
   name: 'extract_bill',
@@ -35,9 +36,14 @@ const EXTRACT_BILL_TOOL = {
 };
 
 export async function parseBillText(text) {
-  const today = new Date();
-  const isoToday = today.toISOString().slice(0, 10);
-  const currentMonth = today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  // Chicago's date, not UTC's, or "this month" flips early on a month's
+  // last evening (see choreParser.js).
+  const isoToday = householdToday();
+  const currentMonth = new Date().toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: HOUSEHOLD_TIMEZONE,
+  });
 
   const response = await anthropic.messages.create({
     model: FAST_EXTRACTION_MODEL, // same small/fast model as chores — this extraction is just as narrow

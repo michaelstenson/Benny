@@ -43,7 +43,9 @@ export async function generateCompsSummary({ estimate, comps, previousEstimate }
 
   const message = await anthropic.messages.create({
     model: FAST_EXTRACTION_MODEL,
-    max_tokens: 300,
+    // The summary is ~100 tokens, but Haiku 5.5's thinking counts toward
+    // this cap too; 300 could run out before any text and return ''.
+    max_tokens: 1000,
     system:
       "You write a short, casual weekly update for a couple tracking their Chicago condo's value " +
       "ahead of a future home sale. Two to three sentences, plain English, no real-estate jargon " +

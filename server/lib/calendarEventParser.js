@@ -8,6 +8,7 @@
 // review step chores never needed.
 
 import { anthropic, FAST_EXTRACTION_MODEL } from './anthropicClient.js';
+import { HOUSEHOLD_TIMEZONE, householdToday } from './recurringBills.js';
 
 const EXTRACT_EVENT_TOOL = {
   name: 'extract_event',
@@ -50,16 +51,17 @@ const EXTRACT_EVENT_TOOL = {
 };
 
 export async function parseEventText(text) {
-  const today = new Date();
-  const isoToday = today.toISOString().slice(0, 10);
-  const weekday = today.toLocaleDateString('en-US', { weekday: 'long' });
+  // Today in Chicago, not on the server's UTC clock (see choreParser.js).
+  const isoToday = householdToday();
+  const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: HOUSEHOLD_TIMEZONE });
 
   const response = await anthropic.messages.create({
     model: FAST_EXTRACTION_MODEL,
     max_tokens: 300,
     system:
       `Today is ${weekday}, ${isoToday}. Use this to resolve relative dates ` +
-      '("Friday", "next Tuesday", "tomorrow") into real ISO dates. The only two ' +
+      '("Friday", "next Tuesday", "tomorrow") into real ISO dates. "Next week" with no ' +
+      'day named means 7 days from today. The only two ' +
       'people in this household are "michael" and "mer" — map any name, nickname, ' +
       'or pronoun to one of those two.',
     tools: [EXTRACT_EVENT_TOOL],

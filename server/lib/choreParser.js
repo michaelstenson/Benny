@@ -5,6 +5,7 @@
 // strict schema and it fills in the fields, guaranteed to match.
 
 import { anthropic, FAST_EXTRACTION_MODEL } from './anthropicClient.js';
+import { HOUSEHOLD_TIMEZONE, householdToday } from './recurringBills.js';
 
 // This is the schema Claude has to fill in. Giving it exactly two allowed
 // assignee values (rather than accepting free text) is what makes this
@@ -39,16 +40,18 @@ const EXTRACT_CHORE_TOOL = {
 };
 
 export async function parseChoreText(text) {
-  const today = new Date();
-  const isoToday = today.toISOString().slice(0, 10);
-  const weekday = today.toLocaleDateString('en-US', { weekday: 'long' });
+  // Today in Chicago, not on the server's UTC clock: after 7pm Central,
+  // UTC is already tomorrow, and "tomorrow" used to land a day late.
+  const isoToday = householdToday();
+  const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: HOUSEHOLD_TIMEZONE });
 
   const response = await anthropic.messages.create({
     model: FAST_EXTRACTION_MODEL,
     max_tokens: 300,
     system:
       `Today is ${weekday}, ${isoToday}. Use this to resolve relative dates ` +
-      '("Thursday", "tomorrow", "next week") into real ISO dates. The only two ' +
+      '("Thursday", "tomorrow", "next week") into real ISO dates. "Next week" with no ' +
+      'day named means 7 days from today. The only two ' +
       'people in this household are "michael" and "mer" — map any name, nickname, ' +
       'or pronoun to one of those two.',
     tools: [EXTRACT_CHORE_TOOL],
