@@ -17,6 +17,7 @@ TOOLS = [
     (schemas.CHECK_OFF, tools.check_off),
     (schemas.SEARCH_EMAIL, tools.search_email),
     (schemas.READ_EMAIL, tools.read_email),
+    (schemas.READ_ATTACHMENT, tools.read_attachment),
     (schemas.PROPOSE_EVENT, tools.propose_event),
     (schemas.PROPOSE_EMAIL_DRAFT, tools.propose_email_draft),
     (schemas.PROPOSALS, tools.proposals),

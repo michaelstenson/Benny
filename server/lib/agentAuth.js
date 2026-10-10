@@ -42,6 +42,7 @@ const AGENT_ROUTES = [
   // to whoever is asking, so each person's agent only reads their own.
   { method: 'GET', path: /^\/gmail\/search$/ },
   { method: 'GET', path: /^\/gmail\/messages\/[0-9a-f]{8,32}$/ },
+  { method: 'GET', path: /^\/gmail\/messages\/[0-9a-f]{8,32}\/attachments\/\d{1,2}$/ },
 ];
 
 export function isAgentRoute(method, path) {

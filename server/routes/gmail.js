@@ -24,7 +24,8 @@ import { Router } from 'express';
 import { authenticatedClientFor, clearIfDeadToken } from '../lib/googleClient.js';
 import { loadTokens, OWNERS } from '../lib/tokenStore.js';
 import { supabaseAdmin } from '../lib/supabaseClient.js';
-import { createDraft, readMessage, searchMessages } from '../lib/gmailClient.js';
+import { createDraft, fetchAttachment, readMessage, searchMessages } from '../lib/gmailClient.js';
+import { readAttachmentText } from '../lib/attachmentReader.js';
 import { ActionError } from '../lib/actionError.js';
 
 export const gmailRouter = Router();
@@ -193,6 +194,33 @@ gmailRouter.get('/gmail/messages/:id', agentOnly, async (req, res) => {
     }
     console.error('[gmail] read failed:', err.message);
     res.status(500).json({ error: 'Could not read that email.' });
+  }
+});
+
+// GET /api/gmail/messages/:id/attachments/:index?owner=mer — one
+// attachment as text, picked by its index in the message's attachments
+// list. PDFs and images are transcribed by Claude (attachmentReader.js).
+gmailRouter.get('/gmail/messages/:id/attachments/:index', agentOnly, async (req, res) => {
+  const owner = ownerFrom(req, res);
+  if (!owner) return;
+  const index = Number(req.params.index);
+  if (!/^[0-9a-f]{8,32}$/.test(req.params.id) || !Number.isInteger(index) || index < 0 || index > 99) {
+    return res.status(400).json({ error: 'Need a Gmail message id and an attachment index.' });
+  }
+
+  try {
+    const attachment = await withGmail(owner, (client) => fetchAttachment(client, req.params.id, index));
+    if (!attachment) {
+      return res.status(404).json({ error: `That email has no attachment at index ${index}.` });
+    }
+    res.json({ owner, attachment: await readAttachmentText(attachment) });
+  } catch (err) {
+    if (err instanceof ActionError) return res.status(err.status).json({ error: err.message });
+    if (err.code === 404 || err.code === 400) {
+      return res.status(404).json({ error: `No email with that id in ${owner}'s Gmail.` });
+    }
+    console.error('[gmail] attachment read failed:', err.message);
+    res.status(500).json({ error: 'Could not read that attachment.' });
   }
 });
 

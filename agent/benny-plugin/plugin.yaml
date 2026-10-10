@@ -18,6 +18,7 @@ provides_tools:
   - benny_check_off
   - benny_search_email
   - benny_read_email
+  - benny_read_attachment
   - benny_propose_event
   - benny_propose_email_draft
   - benny_proposals

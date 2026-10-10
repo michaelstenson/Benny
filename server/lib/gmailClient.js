@@ -84,8 +84,8 @@ export async function searchMessages(oauth2Client, { query, maxResults = 10 }) {
 
 // One message as plain text: the headers that matter, the body (the
 // text/plain part when there is one, otherwise the HTML part flattened
-// to text), and attachment names. Attachments themselves are never
-// fetched.
+// to text), and the attachments listed by index. They're only downloaded
+// when one is asked for (fetchAttachment below).
 export async function readMessage(oauth2Client, id) {
   const gmail = gmailFor(oauth2Client);
   const { data: message } = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
@@ -108,8 +108,34 @@ export async function readMessage(oauth2Client, id) {
     date: headers.date || null,
     body: truncated ? `${body.slice(0, MAX_BODY_CHARS)}…` : body,
     truncated,
-    attachments: parts.filter((p) => p.filename).map((p) => p.filename),
+    attachments: attachmentParts(message.payload).map((p, index) => ({
+      index,
+      filename: p.filename,
+      mime_type: p.mimeType,
+      size: p.body?.size ?? null,
+    })),
   };
+}
+
+function attachmentParts(payload) {
+  return flattenParts(payload).filter((p) => p.filename && p.body?.attachmentId);
+}
+
+// One attachment's bytes, picked by its position in readMessage's
+// attachments list. Gmail's attachment ids change from fetch to fetch,
+// so the message is re-read to find it.
+export async function fetchAttachment(oauth2Client, messageId, index) {
+  const gmail = gmailFor(oauth2Client);
+  const { data: message } = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'full' });
+  const part = attachmentParts(message.payload)[index];
+  if (!part) return null;
+
+  const { data } = await gmail.users.messages.attachments.get({
+    userId: 'me',
+    messageId,
+    id: part.body.attachmentId,
+  });
+  return { filename: part.filename, mimeType: part.mimeType, data: Buffer.from(data.data, 'base64url') };
 }
 
 function flattenParts(part) {
@@ -124,7 +150,7 @@ function decodeBody(data) {
 // Good enough for reading an email, not for rendering one: drops styles
 // and scripts, turns block tags into line breaks, strips the rest, and
 // decodes the common entities.
-function htmlToText(html) {
+export function htmlToText(html) {
   const entities = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
   return html
     .replace(/<(style|script|head)[\s\S]*?<\/\1>/gi, '')

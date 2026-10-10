@@ -240,6 +240,25 @@ class PluginTest(unittest.TestCase):
             result = self.call(tools.read_email, {"message_id": "18c2f0a1b2c3d4e5"})
         self.assertEqual(result["message"]["body"], "Please see Dr. Lee.")
 
+    def test_read_attachment_is_always_the_askers_own_inbox(self):
+        FakeApp.routes[("GET", "/api/gmail/messages/18c2f0a1b2c3d4e5/attachments/0?owner=mer")] = (
+            200, {"owner": "mer", "attachment": {"filename": "referral.pdf", "text": "Refer to: Dr. Lee", "truncated": False}},
+        )
+        with self.as_asker("mer"), self.in_dm():
+            result = self.call(tools.read_attachment, {"message_id": "18c2f0a1b2c3d4e5", "index": 0, "owner": "michael"})
+        self.assertEqual(result["inbox"], "mer")
+        self.assertEqual(result["attachment"]["text"], "Refer to: Dr. Lee")
+        self.assertIn("double-check", result["note"])
+
+    def test_read_attachment_checks_its_inputs_and_where_it_is(self):
+        with self.as_asker("mer"), self.in_dm():
+            for args in [{"message_id": "nope", "index": 0}, {"message_id": "18c2f0a1b2c3d4e5", "index": -1},
+                         {"message_id": "18c2f0a1b2c3d4e5", "index": "0"}, {"message_id": "18c2f0a1b2c3d4e5", "index": True}]:
+                self.assertIn("error", self.call(tools.read_attachment, args))
+        with self.as_asker("mer"), self.in_dm(False):
+            self.assertIn("private DM", self.call(tools.read_attachment, {"message_id": "18c2f0a1b2c3d4e5", "index": 0})["error"])
+        self.assertEqual(FakeApp.requests, [])
+
     def test_email_is_refused_when_nobody_is_known(self):
         with self.as_asker(None), self.in_dm():
             self.assertIn("whoever is asking", self.call(tools.search_email, {"query": "weiss"})["error"])

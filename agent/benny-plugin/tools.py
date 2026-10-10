@@ -288,6 +288,25 @@ def read_email(args):
     return _ok(inbox=owner, message=result.get("message", {}), note=EMAIL_NOTE)
 
 
+@_handles_app_errors
+def read_attachment(args):
+    owner, refusal = _email_owner()
+    if refusal:
+        return refusal
+    message_id = str(args.get("message_id", ""))
+    index = args.get("index", 0)
+    if not GMAIL_ID.match(message_id):
+        return _error("message_id must be an id from benny_search_email.")
+    if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index <= 99:
+        return _error("index must be the attachment's index from benny_read_email.")
+    result = client.call("GET", f"/gmail/messages/{message_id}/attachments/{index}?" + urlencode({"owner": owner}))
+    return _ok(
+        inbox=owner,
+        attachment=result.get("attachment", {}),
+        note=EMAIL_NOTE + " PDFs and images were transcribed by the app, so double-check a name or number that matters.",
+    )
+
+
 # --- Proposals ------------------------------------------------------------
 
 PROPOSED = "It's waiting in the Benny app for Michael or Mer to approve. Say that, never that it's done."

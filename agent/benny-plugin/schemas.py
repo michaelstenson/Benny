@@ -122,9 +122,21 @@ SEARCH_EMAIL = tool(
 
 READ_EMAIL = tool(
     "benny_read_email",
-    "Read one email from the asker's own Gmail as plain text: headers, body, attachment names.",
+    "Read one email from the asker's own Gmail as plain text: headers, body, and its attachments "
+    "(index, name, type).",
     {"message_id": {"type": "string", "description": "From benny_search_email."}},
     ["message_id"],
+)
+
+READ_ATTACHMENT = tool(
+    "benny_read_attachment",
+    "Read one attachment of an email in the asker's own Gmail as text. PDFs (scanned too), images "
+    "and text files work.",
+    {
+        "message_id": {"type": "string"},
+        "index": {"type": "integer", "minimum": 0, "description": "The attachment's index from benny_read_email."},
+    },
+    ["message_id", "index"],
 )
 
 PROPOSALS = tool(

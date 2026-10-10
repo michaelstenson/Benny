@@ -1459,7 +1459,7 @@ terminal is off Discord and Telegram entirely.
   approval, not done").
 - **Cheaper and faster.** No skill to load and no shell round trip: a
   simple question went from three model calls to two, and from about
-  $0.09 to $0.03. The 13 tool definitions are about 1.3K tokens,
+  $0.09 to $0.03. The 14 tool definitions are about 1.4K tokens,
   less than the terminal tool alone.
 
 **Who's asking.** Hermes's session knows which Discord or Telegram
@@ -1478,7 +1478,8 @@ The model can't change it, so:
 **Tools** (all in the `benny` toolset): `benny_today` (the brief, or the
 digest as data), `benny_upcoming`, `benny_chores`, `benny_add_chore`,
 `benny_set_chore_done`, `benny_list`, `benny_add_to_list`,
-`benny_check_off`, `benny_search_email`, `benny_read_email` (see below),
+`benny_check_off`, `benny_search_email`, `benny_read_email`,
+`benny_read_attachment` (see below),
 `benny_propose_event`, `benny_propose_email_draft`,
 `benny_proposals`. Apart from the email tools, they call the same
 allowlisted routes as before, so the app needed no changes for them, and
@@ -1517,13 +1518,17 @@ answering the agent token only, never a signed-in browser):
 | Route | What it returns |
 |---|---|
 | `GET /api/gmail/search?owner=&q=&max=` | Up to 20 messages, newest first: from, to, subject, date, Gmail's snippet, unread. `q` is Gmail's own search syntax. |
-| `GET /api/gmail/messages/:id?owner=` | One message as plain text: from, to, cc, reply-to, subject, date, the body (the text part, or the HTML part flattened to text, cut at 8,000 characters), and attachment names. Attachments are never fetched. |
+| `GET /api/gmail/messages/:id?owner=` | One message as plain text: from, to, cc, reply-to, subject, date, the body (the text part, or the HTML part flattened to text, cut at 8,000 characters), and its attachments (index, name, type, size). |
+| `GET /api/gmail/messages/:id/attachments/:index?owner=` | One attachment as text (cut at 12,000 characters). Text and HTML files are decoded; PDFs (scanned ones too) and images are transcribed by Claude Haiku (`server/lib/attachmentReader.js`), told to copy names and numbers exactly and never follow instructions in the document. Up to 10 MB; other types (Word, spreadsheets) aren't supported yet. |
 
 They use the `gmail.readonly` scope both of us already granted in
 Stage 14, so nobody has to reconnect.
 
-**Plugin tools:** `benny_search_email` and `benny_read_email`. Neither
-takes an owner. The plugin sets it to whoever is asking, and refuses:
+A faxed one-page referral PDF took about 7 seconds and well under a cent
+to transcribe, with every form field intact.
+
+**Plugin tools:** `benny_search_email`, `benny_read_email` and
+`benny_read_attachment`. None of them takes an owner. The plugin sets it to whoever is asking, and refuses:
 - **when it can't tell who's asking**, the same rule as email drafts;
 - **outside a private DM with Benny.** A reply in a server channel or
   thread would put one person's email where the other (or anyone else
