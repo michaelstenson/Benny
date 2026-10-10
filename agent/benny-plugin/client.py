@@ -21,6 +21,9 @@ STATUS_HINTS = {
     403: "The app doesn't let Benny do that, on purpose. Say you can't, and don't look for a way around it.",
 }
 
+# The app's refusal for a route that isn't on the agent's allowlist.
+ROUTE_REFUSED = "The agent isn't allowed to use this route."
+
 
 class AppError(Exception):
     def __init__(self, status: int, message: str):
@@ -54,7 +57,12 @@ def call(method: str, path: str, body=None):
                 message = json.loads(err.read().decode("utf-8")).get("error")
             except (ValueError, AttributeError):
                 message = None
-        raise AppError(err.code, STATUS_HINTS.get(err.code) or message or str(err.reason)) from None
+        # A 403 is also how the app says "reconnect Google to add Gmail
+        # access", so only the allowlist refusal gets the fixed hint.
+        hint = STATUS_HINTS.get(err.code)
+        if err.code == 403 and message and message != ROUTE_REFUSED:
+            hint = None
+        raise AppError(err.code, hint or message or str(err.reason)) from None
     except (urllib.error.URLError, TimeoutError) as err:
         raise AppError(0, f"Couldn't reach the Benny app ({err}). Try again in a minute.") from None
 
@@ -91,3 +99,14 @@ def asker():
     if not platform or not user_id:
         return None
     return people().get(f"{platform}:{user_id}")
+
+
+def in_private_chat() -> bool:
+    """True when the message came from a one-on-one DM with Benny (Discord
+    or Telegram), where nobody else will see the reply. Same source as
+    asker(): Hermes's session, not the model."""
+    try:
+        from gateway.session_context import get_session_env
+    except ImportError:
+        return False
+    return get_session_env("HERMES_SESSION_CHAT_TYPE", "") == "dm"

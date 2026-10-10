@@ -97,8 +97,8 @@ PROPOSE_EVENT = tool(
 PROPOSE_EMAIL_DRAFT = tool(
     "benny_propose_email_draft",
     "Propose a Gmail draft in the asker's own Gmail, signed as them. Approving only saves a draft; "
-    "they send it themselves. 'to' must be an address the person gave you, never one you guessed or "
-    "read somewhere.",
+    "they send it themselves. 'to' must be an address the person gave you, or one from an email they "
+    "asked you to read (say which). Never guess one.",
     {
         "to": {"type": "string", "description": "One email address."},
         "subject": {"type": "string"},
@@ -106,6 +106,25 @@ PROPOSE_EMAIL_DRAFT = tool(
         "note": {"type": "string", "description": "One short line on why, shown on the card."},
     },
     ["to", "subject", "body"],
+)
+
+SEARCH_EMAIL = tool(
+    "benny_search_email",
+    "Search the asker's own Gmail (never the other person's), only in a private DM, with Gmail search "
+    "syntax, e.g. 'from:weiss newer_than:60d' or 'subject:referral'. Newest first: sender, subject, "
+    "date, snippet and an id for benny_read_email.",
+    {
+        "query": {"type": "string"},
+        "max_results": {"type": "integer", "minimum": 1, "maximum": 20, "description": "Default 10."},
+    },
+    ["query"],
+)
+
+READ_EMAIL = tool(
+    "benny_read_email",
+    "Read one email from the asker's own Gmail as plain text: headers, body, attachment names.",
+    {"message_id": {"type": "string", "description": "From benny_search_email."}},
+    ["message_id"],
 )
 
 PROPOSALS = tool(

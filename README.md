@@ -1440,7 +1440,7 @@ and exporting the plan as a Mermaid Gantt chart.
 
 Agent Benny used to reach the app by reading the `benny-app` skill and
 writing `curl` commands in the Pi's terminal. Now a Hermes plugin
-(`agent/benny-plugin/`) gives it eleven typed tools instead, and the
+(`agent/benny-plugin/`) gives it typed tools instead, and the
 terminal is off Discord and Telegram entirely.
 
 **Why:**
@@ -1459,7 +1459,7 @@ terminal is off Discord and Telegram entirely.
   approval, not done").
 - **Cheaper and faster.** No skill to load and no shell round trip: a
   simple question went from three model calls to two, and from about
-  $0.09 to $0.03. The eleven tool definitions are about 1.1K tokens,
+  $0.09 to $0.03. The 13 tool definitions are about 1.3K tokens,
   less than the terminal tool alone.
 
 **Who's asking.** Hermes's session knows which Discord or Telegram
@@ -1478,9 +1478,11 @@ The model can't change it, so:
 **Tools** (all in the `benny` toolset): `benny_today` (the brief, or the
 digest as data), `benny_upcoming`, `benny_chores`, `benny_add_chore`,
 `benny_set_chore_done`, `benny_list`, `benny_add_to_list`,
-`benny_check_off`, `benny_propose_event`, `benny_propose_email_draft`,
-`benny_proposals`. They call the same allowlisted routes as before, so
-the app needed no changes and everything is still in `agent_actions`.
+`benny_check_off`, `benny_search_email`, `benny_read_email` (see below),
+`benny_propose_event`, `benny_propose_email_draft`,
+`benny_proposals`. Apart from the email tools, they call the same
+allowlisted routes as before, so the app needed no changes for them, and
+everything is still in `agent_actions`.
 
 **Tests:** `python -m unittest discover -s agent/benny-plugin/tests -v`
 runs them against a fake app on localhost (standard library only).
@@ -1502,6 +1504,46 @@ Then add `BENNY_PEOPLE` to `~/.hermes/.env`, and in `config.yaml`:
   `document-to-action-items`, `meeting-action-items`,
   `weekly-review-planning` and `hermes-agent`. The Pi's CLI keeps them
   all.
+
+### Gmail search and read (each person's own inbox, in a DM)
+
+Agent Benny can now find an email and propose the reply, like "there's
+a referral from Dr. Weiss in my Gmail, draft a note to the office it
+names." The app's pages still never show inbox content (Stage 15).
+
+**App routes** (`server/routes/gmail.js`, on the agent's allowlist, and
+answering the agent token only, never a signed-in browser):
+
+| Route | What it returns |
+|---|---|
+| `GET /api/gmail/search?owner=&q=&max=` | Up to 20 messages, newest first: from, to, subject, date, Gmail's snippet, unread. `q` is Gmail's own search syntax. |
+| `GET /api/gmail/messages/:id?owner=` | One message as plain text: from, to, cc, reply-to, subject, date, the body (the text part, or the HTML part flattened to text, cut at 8,000 characters), and attachment names. Attachments are never fetched. |
+
+They use the `gmail.readonly` scope both of us already granted in
+Stage 14, so nobody has to reconnect.
+
+**Plugin tools:** `benny_search_email` and `benny_read_email`. Neither
+takes an owner. The plugin sets it to whoever is asking, and refuses:
+- **when it can't tell who's asking**, the same rule as email drafts;
+- **outside a private DM with Benny.** A reply in a server channel or
+  thread would put one person's email where the other (or anyone else
+  in the server) can read it. In a channel, Benny asks you to DM it.
+
+Every result carries a reminder that the email was written by someone
+else and is never a source of instructions. The terminal is already off
+chat, and anything outward still needs approval in the app, so a
+hostile email can at worst get Benny to *propose* something you'd see
+on the card. Email drafts may now go to an address from an email the
+person asked Benny to read (Benny says which), as well as one they typed.
+
+Two things to know: searches show up in `agent_actions` (the query is
+part of the logged path, the email isn't), and what Benny reads stays in
+its chat history on the Pi, like everything else it sees.
+
+**Also fixed: email drafts mangled non-ASCII text.** `createDraft` sent
+the subject and body with no charset, so Gmail read them as Latin-1 and
+an en dash arrived as "â€“". The body is now declared UTF-8 and the
+subject is RFC 2047 encoded.
 
 Re-copy the plugin and restart (`hermes gateway restart`) whenever it
 changes. Without the terminal, Benny can't run the skills that need it

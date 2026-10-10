@@ -15,6 +15,8 @@ TOOLS = [
     (schemas.LIST_ITEMS, tools.list_items),
     (schemas.ADD_TO_LIST, tools.add_to_list),
     (schemas.CHECK_OFF, tools.check_off),
+    (schemas.SEARCH_EMAIL, tools.search_email),
+    (schemas.READ_EMAIL, tools.read_email),
     (schemas.PROPOSE_EVENT, tools.propose_event),
     (schemas.PROPOSE_EMAIL_DRAFT, tools.propose_email_draft),
     (schemas.PROPOSALS, tools.proposals),

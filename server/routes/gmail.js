@@ -6,19 +6,25 @@
 // reconnect (see googleClient.js), so there's no separate Gmail
 // connection state to track.
 //
-// Deliberately does NOT surface inbox content anywhere in this app. Benny
-// has gmail.readonly (fetchRecentMessages in gmailClient.js still works
-// and is kept for future automation to use server-side — e.g. an agent
-// reading a vendor's reply), but nothing in this file's routes calls it,
-// and nothing in the UI displays a live inbox. The only Gmail content
-// ever shown to a person is a local record of drafts Benny itself
-// created (gmail_drafts table) — never a fetch of the mailbox.
+// Deliberately does NOT surface inbox content anywhere in this app's
+// pages. The only Gmail content ever shown on a page is a local record of
+// drafts Benny itself created (gmail_drafts table) — never a fetch of the
+// mailbox.
+//
+// Agent Benny can search and read mail (GET /gmail/search and
+// /gmail/messages/:id below), so it can find a referral and propose the
+// reply. Those routes answer the agent token only, never a signed-in
+// browser, and each request names one owner. The Hermes plugin is what
+// limits that to whoever is asking: it takes the owner from Hermes's
+// session (the Discord or Telegram account that sent the message), never
+// from the model, so Michael can't get Benny to read Mer's mail or the
+// other way around.
 
 import { Router } from 'express';
 import { authenticatedClientFor, clearIfDeadToken } from '../lib/googleClient.js';
 import { loadTokens, OWNERS } from '../lib/tokenStore.js';
 import { supabaseAdmin } from '../lib/supabaseClient.js';
-import { createDraft } from '../lib/gmailClient.js';
+import { createDraft, readMessage, searchMessages } from '../lib/gmailClient.js';
 import { ActionError } from '../lib/actionError.js';
 
 export const gmailRouter = Router();
@@ -95,13 +101,7 @@ export async function createTrackedDraft({ owner, to, subject, body }) {
     throw new ActionError(400, '"to" and "subject" must be a single line.');
   }
 
-  const tokens = await loadTokens(owner);
-  if (!tokens?.refresh_token) {
-    throw new ActionError(424, `${owner}'s Gmail isn't connected yet.`);
-  }
-
-  try {
-    const oauth2Client = authenticatedClientFor(owner, tokens);
+  return withGmail(owner, async (oauth2Client) => {
     const draft = await createDraft(oauth2Client, { to, subject, body });
 
     const { error } = await supabaseAdmin
@@ -110,6 +110,20 @@ export async function createTrackedDraft({ owner, to, subject, body }) {
     if (error) throw error;
 
     return { id: draft.id };
+  });
+}
+
+// Runs fn with an authenticated Gmail client for owner, turning the
+// failures a person can fix (not connected, expired, missing Gmail
+// scope) into ActionErrors.
+async function withGmail(owner, fn) {
+  const tokens = await loadTokens(owner);
+  if (!tokens?.refresh_token) {
+    throw new ActionError(424, `${owner}'s Gmail isn't connected yet.`);
+  }
+
+  try {
+    return await fn(authenticatedClientFor(owner, tokens));
   } catch (err) {
     if (await clearIfDeadToken(owner, err)) {
       throw new ActionError(424, `${owner}'s connection has expired — reconnect it.`);
@@ -123,6 +137,64 @@ export async function createTrackedDraft({ owner, to, subject, body }) {
     throw err;
   }
 }
+
+// Search and read answer only the agent token. The app's own pages never
+// show inbox content (Stage 15), and that stays true.
+function agentOnly(req, res, next) {
+  if (req.user?.agent) return next();
+  res.status(403).json({ error: 'Only agent Benny reads email, for whoever asked it to.' });
+}
+
+function ownerFrom(req, res) {
+  const { owner } = req.query;
+  if (OWNERS.includes(owner)) return owner;
+  res.status(400).json({ error: `"owner" must be one of: ${OWNERS.join(', ')}.` });
+  return null;
+}
+
+const MAX_SEARCH_RESULTS = 20;
+
+// GET /api/gmail/search?owner=mer&q=from:weiss&max=10 — newest first,
+// metadata and Gmail's snippet only.
+gmailRouter.get('/gmail/search', agentOnly, async (req, res) => {
+  const owner = ownerFrom(req, res);
+  if (!owner) return;
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  if (!query || query.length > 500 || /[\r\n]/.test(query)) {
+    return res.status(400).json({ error: '"q" must be a Gmail search of up to 500 characters on one line.' });
+  }
+  const max = Math.min(Math.max(Number.parseInt(req.query.max, 10) || 10, 1), MAX_SEARCH_RESULTS);
+
+  try {
+    const messages = await withGmail(owner, (client) => searchMessages(client, { query, maxResults: max }));
+    res.json({ owner, messages });
+  } catch (err) {
+    if (err instanceof ActionError) return res.status(err.status).json({ error: err.message });
+    console.error('[gmail] search failed:', err.message);
+    res.status(500).json({ error: 'Could not search Gmail.' });
+  }
+});
+
+// GET /api/gmail/messages/:id?owner=mer — one message as plain text.
+gmailRouter.get('/gmail/messages/:id', agentOnly, async (req, res) => {
+  const owner = ownerFrom(req, res);
+  if (!owner) return;
+  if (!/^[0-9a-f]{8,32}$/.test(req.params.id)) {
+    return res.status(400).json({ error: 'That isn\'t a Gmail message id.' });
+  }
+
+  try {
+    const message = await withGmail(owner, (client) => readMessage(client, req.params.id));
+    res.json({ owner, message });
+  } catch (err) {
+    if (err instanceof ActionError) return res.status(err.status).json({ error: err.message });
+    if (err.code === 404 || err.code === 400) {
+      return res.status(404).json({ error: `No email with that id in ${owner}'s Gmail.` });
+    }
+    console.error('[gmail] read failed:', err.message);
+    res.status(500).json({ error: 'Could not read that email.' });
+  }
+});
 
 // POST /api/gmail/drafts — body { owner, to, subject, body }. Creates a
 // DRAFT in that owner's Gmail — never sends — and records it in

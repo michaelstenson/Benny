@@ -37,6 +37,11 @@ const AGENT_ROUTES = [
   // turn a proposal into a real calendar event or Gmail draft.
   { method: 'GET', path: /^\/proposals$/ },
   { method: 'POST', path: /^\/proposals$/ },
+  // Gmail search and read, so the agent can find an email and propose
+  // the reply. Each request names one owner; the Hermes plugin sets it
+  // to whoever is asking, so each person's agent only reads their own.
+  { method: 'GET', path: /^\/gmail\/search$/ },
+  { method: 'GET', path: /^\/gmail\/messages\/[0-9a-f]{8,32}$/ },
 ];
 
 export function isAgentRoute(method, path) {

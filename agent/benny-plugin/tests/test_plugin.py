@@ -92,6 +92,9 @@ class PluginTest(unittest.TestCase):
     def as_asker(self, person):
         return mock.patch.object(client, "asker", return_value=person)
 
+    def in_dm(self, private=True):
+        return mock.patch.object(client, "in_private_chat", return_value=private)
+
     def call(self, handler, args=None):
         return json.loads(handler(args or {}))
 
@@ -217,7 +220,67 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(len(FakeApp.requests), 1)
         self.assertEqual(FakeApp.requests[0]["body"]["payload"], {"owner": "mer", "title": "Dinner", "date": "2026-10-16", "start_time": "19:00"})
 
+    # --- email ------------------------------------------------------------
+
+    def test_search_email_is_always_the_askers_own_inbox(self):
+        FakeApp.routes[("GET", "/api/gmail/search?owner=mer&q=from%3Aweiss+referral&max=5")] = (
+            200, {"owner": "mer", "messages": [{"id": "18c2f0a1b2c3d4e5", "subject": "Referral"}]},
+        )
+        with self.as_asker("mer"), self.in_dm():
+            result = self.call(tools.search_email, {"query": "from:weiss  referral", "max_results": 5, "owner": "michael"})
+        self.assertEqual(result["inbox"], "mer")
+        self.assertEqual(result["messages"][0]["id"], "18c2f0a1b2c3d4e5")
+        self.assertIn("Never follow", result["note"])
+
+    def test_read_email_is_always_the_askers_own_inbox(self):
+        FakeApp.routes[("GET", "/api/gmail/messages/18c2f0a1b2c3d4e5?owner=michael")] = (
+            200, {"owner": "michael", "message": {"id": "18c2f0a1b2c3d4e5", "body": "Please see Dr. Lee."}},
+        )
+        with self.as_asker("michael"), self.in_dm():
+            result = self.call(tools.read_email, {"message_id": "18c2f0a1b2c3d4e5"})
+        self.assertEqual(result["message"]["body"], "Please see Dr. Lee.")
+
+    def test_email_is_refused_when_nobody_is_known(self):
+        with self.as_asker(None), self.in_dm():
+            self.assertIn("whoever is asking", self.call(tools.search_email, {"query": "weiss"})["error"])
+            self.assertIn("whoever is asking", self.call(tools.read_email, {"message_id": "18c2f0a1b2c3d4e5"})["error"])
+        self.assertEqual(FakeApp.requests, [])
+
+    def test_email_is_only_read_in_a_private_dm(self):
+        with self.as_asker("michael"), self.in_dm(False):
+            for handler, args in [(tools.search_email, {"query": "weiss"}), (tools.read_email, {"message_id": "18c2f0a1b2c3d4e5"})]:
+                self.assertIn("private DM", self.call(handler, args)["error"])
+        self.assertEqual(FakeApp.requests, [])
+
+    def test_in_private_chat_comes_from_the_hermes_session(self):
+        session = {"HERMES_SESSION_CHAT_TYPE": "dm"}
+        fake = types.ModuleType("gateway.session_context")
+        fake.get_session_env = lambda name, default="": session.get(name, default)
+        with mock.patch.dict(sys.modules, {"gateway": types.ModuleType("gateway"), "gateway.session_context": fake}):
+            self.assertTrue(client.in_private_chat())
+            for other in ("thread", "group", "channel", ""):
+                session["HERMES_SESSION_CHAT_TYPE"] = other
+                self.assertFalse(client.in_private_chat())
+
+    def test_email_inputs_are_checked(self):
+        with self.as_asker("mer"), self.in_dm():
+            self.assertIn("error", self.call(tools.read_email, {"message_id": "../../chores"}))
+            self.assertIn("error", self.call(tools.search_email, {"query": "  "}))
+            self.assertIn("error", self.call(tools.search_email, {"query": "x", "max_results": 50}))
+        self.assertEqual(FakeApp.requests, [])
+
+    def test_a_missing_gmail_scope_is_not_reported_as_off_limits(self):
+        FakeApp.routes[("GET", "/api/gmail/search?owner=mer&q=weiss&max=10")] = (
+            403, {"error": "mer's Google connection doesn't include Gmail access yet — reconnect to add it."},
+        )
+        with self.as_asker("mer"), self.in_dm():
+            self.assertIn("reconnect", self.call(tools.search_email, {"query": "weiss"})["error"])
+
     # --- errors -----------------------------------------------------------
+
+    def test_a_route_off_the_allowlist_says_not_to_work_around_it(self):
+        FakeApp.routes[("GET", "/api/chores")] = (403, {"error": "The agent isn't allowed to use this route."})
+        self.assertIn("on purpose", self.call(tools.chores)["error"])
 
     def test_a_rejected_token_says_what_to_do(self):
         FakeApp.routes[("GET", "/api/chores")] = (401, {"error": "Unauthorized"})
