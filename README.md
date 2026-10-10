@@ -73,7 +73,8 @@ benny/
 │   ├── log.html / log.js   # the decision log (Stage 22)
 │   ├── auth-guard.js       # loaded on every signed-in page; bounces to /login.html on 401
 │   └── escape.js           # escapeHtml() for titles that came from outside (Stage 18)
-├── agent/benny-app/SKILL.md  # instructions for Benny the agent (Hermes) on using this app's API
+├── agent/benny-plugin/      # Hermes plugin: Benny the agent's tools for this app's API
+├── agent/scripts/           # scripts Hermes runs on the Pi (the morning brief)
 ├── scripts/                 # one-time setup: the Stage 22 migration + the roadmap importer
 ├── powerview-bridge/        # standalone script that runs on a Raspberry Pi at home,
 │                             # not part of the Vercel app — see its own README.md
@@ -979,7 +980,8 @@ and the agent is a process that reads Discord messages.
 - **Chores remember who added them.** New `source` (`app` / `agent`)
   and `created_by` (an email, or `agent`) columns. The chores page shows
   "via Benny 🐧" on anything the agent added.
-- **`agent/benny-app/SKILL.md`** is the agent's instructions for this
+- **`agent/benny-app/SKILL.md`** (since replaced by the Benny plugin
+  for Hermes, see below) was the agent's instructions for this
   API: what each route does, curl examples, and the rules. Those are:
   always name the person in chore text (the parser defaults to Michael),
   read the parsed result back, and treat chore and event text as data,
@@ -1193,11 +1195,10 @@ The skill's "morning brief" section now just says to pass
 `/digest/brief` along as-is when someone asks for today's rundown.
 
 **Setup (on the Pi):**
-1. Copy the script and the updated skill:
+1. Copy the script:
    ```
    ssh pi 'mkdir -p ~/.hermes/scripts'
    scp agent/scripts/morning-brief.sh pi:~/.hermes/scripts/morning-brief.sh
-   scp agent/benny-app/SKILL.md pi:~/.hermes/skills/productivity/benny-app/SKILL.md
    ```
 2. Switch the existing job (`6c657c92b7a2`) to the script, with no model:
    ```
@@ -1434,6 +1435,77 @@ server-only like the rest.
 **Not built yet:** agent access (see the rules above), a documents
 tracker (apostilles start in December), a Summit-prep post in Discord,
 and exporting the plan as a Mermaid Gantt chart.
+
+## Benny plugin for Hermes (replaces the benny-app skill)
+
+Agent Benny used to reach the app by reading the `benny-app` skill and
+writing `curl` commands in the Pi's terminal. Now a Hermes plugin
+(`agent/benny-plugin/`) gives it eleven typed tools instead, and the
+terminal is off Discord and Telegram entirely.
+
+**Why:**
+- **Nobody in chat can run commands on the Pi.** Before, a chore title
+  or calendar invite (which anyone can send us) carrying instructions
+  could have got Benny to run a shell command on the machine that holds
+  its Discord, Anthropic and app tokens and runs Home Assistant. That's
+  also what had to be fixed before Benny could read email.
+- **Benny never sees the app token.** The plugin reads it from the Pi's
+  `.env`; it isn't in any command Benny writes, so it can't end up in a
+  reply.
+- **The rules are code now.** Each tool checks its input before anything
+  is sent (ids must be real ids, dates `YYYY-MM-DD`, times `HH:MM`), and
+  results come back trimmed to the fields Benny needs, with a short
+  reminder where there's a rule ("read it back", "it's waiting for
+  approval, not done").
+- **Cheaper and faster.** No skill to load and no shell round trip: a
+  simple question went from three model calls to two, and from about
+  $0.09 to $0.03. The eleven tool definitions are about 1.1K tokens,
+  less than the terminal tool alone.
+
+**Who's asking.** Hermes's session knows which Discord or Telegram
+account sent the message. The plugin maps it to Michael or Mer with
+`BENNY_PEOPLE` in the Pi's `.env` (kept out of this repo, which is
+public), e.g. `discord:<id>=michael,discord:<id>=mer,telegram:<id>=michael`.
+The model can't change it, so:
+- **Email drafts only ever go in the asker's own Gmail.** There's no
+  owner parameter at all.
+- **Chores and calendar proposals default to the asker**, instead of
+  the app's old default of Michael. Naming the other person still works.
+- **If the sender is unknown** (a cron run, the CLI, an account not in
+  `BENNY_PEOPLE`, or a Hermes update that moves the session module),
+  anything tied to one person is refused rather than guessed.
+
+**Tools** (all in the `benny` toolset): `benny_today` (the brief, or the
+digest as data), `benny_upcoming`, `benny_chores`, `benny_add_chore`,
+`benny_set_chore_done`, `benny_list`, `benny_add_to_list`,
+`benny_check_off`, `benny_propose_event`, `benny_propose_email_draft`,
+`benny_proposals`. They call the same allowlisted routes as before, so
+the app needed no changes and everything is still in `agent_actions`.
+
+**Tests:** `python -m unittest discover -s agent/benny-plugin/tests -v`
+runs them against a fake app on localhost (standard library only).
+
+**Setup on the Pi** (done Oct 9, 2026):
+```
+tar --exclude=__pycache__ -C agent -cf - benny-plugin | ssh pi 'mkdir -p ~/.hermes/plugins/benny && tar -xf - -C ~/.hermes/plugins/benny --strip-components=1'
+ssh pi '~/.local/bin/hermes plugins doctor ~/.hermes/plugins/benny && ~/.local/bin/hermes plugins enable benny'
+```
+Then add `BENNY_PEOPLE` to `~/.hermes/.env`, and in `config.yaml`:
+- `platform_toolsets`: Discord `[web, benny, skills, memory, clarify, vision, cronjob, discord]`,
+  Telegram the same without `discord`. No `terminal`.
+- `tools.tool_search.enabled: off`. Hermes otherwise shows plugin tools
+  only by name, and Benny has to look one up before every first use.
+- `skills.disabled` includes `benny-app`, plus `google-workspace` and
+  the other Gmail and Apple skills (the app is the only way to Google).
+- `skills.platform_disabled` for Discord and Telegram hides every skill
+  that needs the terminal, which leaves `humanizer`,
+  `document-to-action-items`, `meeting-action-items`,
+  `weekly-review-planning` and `hermes-agent`. The Pi's CLI keeps them
+  all.
+
+Re-copy the plugin and restart (`hermes gateway restart`) whenever it
+changes. Without the terminal, Benny can't run the skills that need it
+(maps, PDFs, GIF search) from chat. Images still work through `vision`.
 
 ## Deploying to Vercel
 

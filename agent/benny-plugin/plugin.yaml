@@ -1,0 +1,27 @@
+name: benny
+version: 1.0.0
+description: >
+  Benny the agent's tools for Benny the app (the Penguin Palace household
+  app): today's digest and brief, the upcoming timeline, chores, shared
+  lists, and calendar/email proposals that wait for approval in the app.
+  Replaces calling the app with curl through the terminal.
+author: Michael Stenson
+provides_tools:
+  - benny_today
+  - benny_upcoming
+  - benny_chores
+  - benny_add_chore
+  - benny_set_chore_done
+  - benny_list
+  - benny_add_to_list
+  - benny_check_off
+  - benny_propose_event
+  - benny_propose_email_draft
+  - benny_proposals
+provides_hooks: []
+requires_env:
+  - name: BENNY_API_URL
+    description: "The app's API base, e.g. https://benny-penguin-palace.vercel.app/api"
+  - name: BENNY_AGENT_TOKEN
+    description: "The agent's bearer token (same value as BENNY_AGENT_TOKEN in Vercel)"
+    secret: true
