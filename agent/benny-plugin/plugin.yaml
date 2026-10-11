@@ -3,8 +3,9 @@ version: 1.0.0
 description: >
   Benny the agent's tools for Benny the app (the Penguin Palace household
   app): today's digest and brief, the upcoming timeline, chores, shared
-  lists, searching and reading the asker's own Gmail, and calendar/email
-  proposals that wait for approval in the app.
+  lists, searching and reading the asker's own Gmail, calendar/email
+  proposals that wait for approval in the app, and the smart home through
+  Home Assistant on the Pi.
   Replaces calling the app with curl through the terminal.
 author: Michael Stenson
 provides_tools:
@@ -19,6 +20,8 @@ provides_tools:
   - benny_search_email
   - benny_read_email
   - benny_read_attachment
+  - benny_home
+  - benny_home_control
   - benny_propose_event
   - benny_propose_email_draft
   - benny_proposals
@@ -28,4 +31,7 @@ requires_env:
     description: "The app's API base, e.g. https://benny-penguin-palace.vercel.app/api"
   - name: BENNY_AGENT_TOKEN
     description: "The agent's bearer token (same value as BENNY_AGENT_TOKEN in Vercel)"
+    secret: true
+  - name: BENNY_HA_TOKEN
+    description: "A Home Assistant long-lived access token (HA on the same Pi; BENNY_HA_URL overrides http://127.0.0.1:8123)"
     secret: true

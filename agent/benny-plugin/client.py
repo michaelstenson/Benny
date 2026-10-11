@@ -1,7 +1,8 @@
-"""Talking to the Benny app's agent API, and knowing who's asking.
+"""Talking to the Benny app's agent API and to Home Assistant, and knowing
+who's asking.
 
-The token stays in this process: the model never sees it, types it or
-puts it in a command, so it can't leak it in a reply.
+The tokens stay in this process: the model never sees them, types them or
+puts them in a command, so it can't leak them in a reply.
 """
 
 from __future__ import annotations
@@ -32,6 +33,29 @@ class AppError(Exception):
         self.message = message
 
 
+def _send(method: str, url: str, token: str, body=None):
+    """The HTTP part of call() and home_call(). Returns parsed JSON, or text
+    for text responses; HTTP and network errors are left to the caller."""
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, method=method, headers=headers)
+    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+        text = response.read().decode("utf-8")
+        is_json = "json" in response.headers.get("Content-Type", "")
+        return json.loads(text) if is_json else text
+
+
+def _error_field(err: urllib.error.HTTPError, field: str):
+    with err:
+        try:
+            return json.loads(err.read().decode("utf-8")).get(field)
+        except (ValueError, AttributeError):
+            return None
+
+
 def call(method: str, path: str, body=None):
     """One request to the app. Returns parsed JSON, or text for text responses."""
     base = os.environ.get("BENNY_API_URL", "").rstrip("/")
@@ -39,24 +63,10 @@ def call(method: str, path: str, body=None):
     if not base or not token:
         raise AppError(0, "BENNY_API_URL or BENNY_AGENT_TOKEN isn't set on the Pi. Tell Michael.")
 
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    data = None
-    if body is not None:
-        data = json.dumps(body).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(base + path, data=data, method=method, headers=headers)
-
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-            text = response.read().decode("utf-8")
-            is_json = "json" in response.headers.get("Content-Type", "")
-            return json.loads(text) if is_json else text
+        return _send(method, base + path, token, body)
     except urllib.error.HTTPError as err:
-        with err:
-            try:
-                message = json.loads(err.read().decode("utf-8")).get("error")
-            except (ValueError, AttributeError):
-                message = None
+        message = _error_field(err, "error")
         # A 403 is also how the app says "reconnect Google to add Gmail
         # access", so only the allowlist refusal gets the fixed hint.
         hint = STATUS_HINTS.get(err.code)
@@ -65,6 +75,28 @@ def call(method: str, path: str, body=None):
         raise AppError(err.code, hint or message or str(err.reason)) from None
     except (urllib.error.URLError, TimeoutError) as err:
         raise AppError(0, f"Couldn't reach the Benny app ({err}). Try again in a minute.") from None
+
+
+def home_call(method: str, path: str, body=None):
+    """One request to Home Assistant's REST API, which runs on the same Pi
+    as Hermes, so nothing goes through the app or Vercel. BENNY_HA_TOKEN is
+    a Home Assistant long-lived access token; BENNY_HA_URL defaults to the
+    Pi itself."""
+    base = os.environ.get("BENNY_HA_URL", "http://127.0.0.1:8123").rstrip("/")
+    token = os.environ.get("BENNY_HA_TOKEN", "")
+    if not token:
+        raise AppError(0, "BENNY_HA_TOKEN isn't set on the Pi, so Benny can't reach the smart home yet. Tell Michael.")
+
+    try:
+        return _send(method, base + path, token, body)
+    except urllib.error.HTTPError as err:
+        if err.code == 401:
+            err.close()
+            raise AppError(401, "Home Assistant rejected Benny's token. Tell Michael, and don't retry.") from None
+        message = _error_field(err, "message")
+        raise AppError(err.code, message or str(err.reason)) from None
+    except (urllib.error.URLError, TimeoutError) as err:
+        raise AppError(0, f"Couldn't reach Home Assistant on the Pi ({err}). Try again in a minute.") from None
 
 
 def people() -> dict:

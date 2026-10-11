@@ -1,6 +1,7 @@
 """Tool handlers: what runs when Benny calls a benny_* tool.
 
-Each one validates its input, makes one or two calls to the app, and
+Each one validates its input, makes one or two calls to the app (or to
+Home Assistant, for the smart home), and
 returns a small JSON string: only the fields Benny needs, plus a short
 reminder where there's a rule to follow (read it back, it's only a
 proposal). Errors come back as {"error": ...}, never as exceptions.
@@ -305,6 +306,168 @@ def read_attachment(args):
         attachment=result.get("attachment", {}),
         note=EMAIL_NOTE + " PDFs and images were transcribed by the app, so double-check a name or number that matters.",
     )
+
+
+# --- Smart home (Home Assistant on the Pi) --------------------------------
+#
+# Direct, no proposals: Michael decided on Oct 11, 2026 that he doesn't want
+# to approve lights and shades. What Benny may touch is limited by domain
+# instead. Locks, alarms, automations and Home Assistant's own settings
+# never appear here.
+
+HOME_KINDS = {
+    "light": "light", "shade": "cover", "switch": "switch",
+    "scene": "scene", "media": "media_player", "vacuum": "vacuum",
+}
+
+# (domain, action) -> the Home Assistant service that does it.
+HOME_SERVICES = {
+    ("light", "on"): "turn_on", ("light", "off"): "turn_off",
+    ("switch", "on"): "turn_on", ("switch", "off"): "turn_off",
+    ("cover", "open"): "open_cover", ("cover", "close"): "close_cover",
+    ("cover", "stop"): "stop_cover", ("cover", "position"): "set_cover_position",
+    ("scene", "activate"): "turn_on",
+    ("media_player", "on"): "turn_on", ("media_player", "off"): "turn_off",
+    ("media_player", "play"): "media_play", ("media_player", "pause"): "media_pause",
+    ("vacuum", "start"): "start", ("vacuum", "dock"): "return_to_base",
+    ("vacuum", "pause"): "pause", ("vacuum", "stop"): "stop",
+}
+
+ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
+COLOR = re.compile(r"^[a-z ]{3,30}$")
+
+# Whites people ask for that aren't CSS color names, as color temperatures.
+WHITES_KELVIN = {"warm white": 2700, "soft white": 2700, "cool white": 4500, "daylight": 6000}
+
+
+def _room_key(text: str) -> str:
+    """'Rey’s Room' and 'reys_room' both become 'reys room'."""
+    return " ".join(text.lower().replace("_", " ").replace("'", "").replace("’", "").split())
+
+
+def _domain(entity_id: str) -> str:
+    return entity_id.split(".", 1)[0]
+
+
+def _slim_device(state: dict, batteries: dict) -> dict:
+    attrs = state.get("attributes") or {}
+    entity_id = state["entity_id"]
+    domain = _domain(entity_id)
+    slim = {"id": entity_id, "name": attrs.get("friendly_name") or entity_id, "state": state.get("state")}
+    if domain == "light" and attrs.get("brightness") is not None:
+        slim["brightness"] = round(attrs["brightness"] * 100 / 255)
+    if attrs.get("is_hue_group") or isinstance(attrs.get("entity_id"), list):
+        slim["group"] = True
+    if domain == "cover":
+        if attrs.get("current_position") is not None:
+            slim["position"] = attrs["current_position"]
+        battery = batteries.get(entity_id.split(".", 1)[1])
+        if battery is not None:
+            slim["battery"] = battery
+    if domain == "media_player" and attrs.get("media_title"):
+        slim["playing"] = attrs["media_title"]
+    return slim
+
+
+def _batteries(states: list) -> dict:
+    """Shade batteries are separate sensors named after the shade:
+    cover.reys_room_rey_west -> sensor.reys_room_rey_west_battery."""
+    found = {}
+    for s in states:
+        entity_id = s.get("entity_id", "")
+        if entity_id.startswith("sensor.") and entity_id.endswith("_battery"):
+            try:
+                found[entity_id[len("sensor."):-len("_battery")]] = int(float(s.get("state")))
+            except (TypeError, ValueError):
+                pass
+    return found
+
+
+@_handles_app_errors
+def home(args):
+    kind = args.get("kind")
+    if kind is not None and kind not in HOME_KINDS:
+        return _error("kind must be one of: " + ", ".join(HOME_KINDS) + ".")
+    room = _room_key(str(args.get("room") or ""))
+    states = client.home_call("GET", "/api/states")
+    domains = {HOME_KINDS[kind]} if kind else set(HOME_KINDS.values()) - {"scene"}
+
+    def matches(s):
+        name = (s.get("attributes") or {}).get("friendly_name") or ""
+        return not room or room in _room_key(name) or room in _room_key(s["entity_id"].split(".", 1)[1])
+
+    shown = [s for s in states if _domain(s.get("entity_id", "")) in domains and matches(s)]
+    shown.sort(key=lambda s: (_domain(s["entity_id"]), (s.get("attributes") or {}).get("friendly_name") or ""))
+    batteries = _batteries(states)
+    result = {"devices": [_slim_device(s, batteries) for s in shown]}
+    if not shown and room:
+        result["note"] = "Nothing matched that room. Call benny_home without room to see every name."
+    elif any(d["state"] == "unavailable" for d in result["devices"]):
+        result["note"] = "unavailable = Home Assistant can't reach it right now. A shade battery at 0 is probably flat."
+    return _ok(**result)
+
+
+@_handles_app_errors
+def home_control(args):
+    # Anyone who can talk to Benny in Discord could otherwise switch things
+    # off, and so could a cron run acting on text it read.
+    if not client.asker():
+        return _error("I only change things in the house when Michael or Mer asks, and I can't tell who's asking here.")
+
+    ids = args.get("ids")
+    if (not isinstance(ids, list) or not ids or len(ids) > 30
+            or not all(isinstance(i, str) and ENTITY_ID.match(i) for i in ids)):
+        return _error("ids must be a list of ids from benny_home.")
+    ids = list(dict.fromkeys(ids))
+    action = args.get("action")
+    if action not in {a for _, a in HOME_SERVICES}:
+        return _error("action isn't one I know. See benny_home_control's list.")
+
+    extra = {}
+    brightness, color, position = args.get("brightness"), args.get("color"), args.get("position")
+    if brightness is not None or color is not None:
+        if action != "on" or any(_domain(i) != "light" for i in ids):
+            return _error("brightness and color only go with action=on for lights.")
+        if brightness is not None:
+            if not isinstance(brightness, int) or isinstance(brightness, bool) or not 1 <= brightness <= 100:
+                return _error("brightness must be a whole number from 1 to 100.")
+            extra["brightness_pct"] = brightness
+        if color is not None:
+            color = " ".join(str(color).lower().split())
+            if not COLOR.match(color):
+                return _error("color must be a color name, like red or warm white.")
+            if color in WHITES_KELVIN:
+                extra["color_temp_kelvin"] = WHITES_KELVIN[color]
+            else:
+                extra["color_name"] = color.replace(" ", "")
+    if action == "position":
+        if not isinstance(position, int) or isinstance(position, bool) or not 0 <= position <= 100:
+            return _error("position must be a whole number from 0 (closed) to 100 (open).")
+        extra["position"] = position
+
+    states = {s.get("entity_id"): s for s in client.home_call("GET", "/api/states")}
+    unknown = [i for i in ids if i not in states or _domain(i) not in HOME_KINDS.values()]
+    if unknown:
+        return _error("Not something I can control: " + ", ".join(unknown) + ". Use ids from benny_home.")
+    cannot = [i for i in ids if (_domain(i), action) not in HOME_SERVICES]
+    if cannot:
+        return _error(f"These can't do '{action}': " + ", ".join(cannot) + ".")
+    offline = [i for i in ids if states[i].get("state") == "unavailable"]
+    if offline:
+        return _error("Home Assistant can't reach these right now, so nothing was sent: " + ", ".join(offline) + ".")
+
+    by_domain = {}
+    for entity_id in ids:
+        by_domain.setdefault(_domain(entity_id), []).append(entity_id)
+    for domain, targets in by_domain.items():
+        client.home_call("POST", f"/api/services/{domain}/{HOME_SERVICES[(domain, action)]}",
+                         {"entity_id": targets, **extra})
+
+    names = [(states[i].get("attributes") or {}).get("friendly_name") or i for i in ids]
+    tell = "Say it's done."
+    if "cover" in by_domain or "vacuum" in by_domain:
+        tell = "Shades and the vacuum take a moment to move: say it's on its way, not that it's finished."
+    return _ok(done=action, devices=names, tell_them=tell)
 
 
 # --- Proposals ------------------------------------------------------------

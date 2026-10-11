@@ -76,6 +76,8 @@ class PluginTest(unittest.TestCase):
                 "BENNY_API_URL": f"http://127.0.0.1:{cls.server.server_port}/api",
                 "BENNY_AGENT_TOKEN": "test-token",
                 "BENNY_PEOPLE": "discord:111=michael, discord:222=mer, telegram:333=michael, discord:444=aunt",
+                "BENNY_HA_URL": f"http://127.0.0.1:{cls.server.server_port}",
+                "BENNY_HA_TOKEN": "ha-token",
             },
         )
         cls.env.start()
@@ -294,6 +296,115 @@ class PluginTest(unittest.TestCase):
         )
         with self.as_asker("mer"), self.in_dm():
             self.assertIn("reconnect", self.call(tools.search_email, {"query": "weiss"})["error"])
+
+    # --- smart home -------------------------------------------------------
+
+    HA_STATES = [
+        {"entity_id": "light.kitchen_kitchen", "state": "on", "attributes": {"friendly_name": "Kitchen", "brightness": 128, "is_hue_group": True}},
+        {"entity_id": "light.kitchen_kitchen_1", "state": "off", "attributes": {"friendly_name": "Kitchen 1"}},
+        {"entity_id": "cover.reys_room_rey_west", "state": "open", "attributes": {"friendly_name": "Rey’s Room Rey West", "current_position": 100}},
+        {"entity_id": "cover.joshs_room_josh_north", "state": "unavailable", "attributes": {"friendly_name": "Josh’s Room Josh North"}},
+        {"entity_id": "sensor.reys_room_rey_west_battery", "state": "82", "attributes": {}},
+        {"entity_id": "switch.wemo_mini", "state": "off", "attributes": {"friendly_name": "Wemo Mini"}},
+        {"entity_id": "scene.kitchen_kitchen_relax", "state": "unknown", "attributes": {"friendly_name": "Kitchen Relax"}},
+        {"entity_id": "lock.front_door", "state": "locked", "attributes": {"friendly_name": "Front door"}},
+        {"entity_id": "automation.morning", "state": "on", "attributes": {"friendly_name": "Morning"}},
+    ]
+
+    def with_ha_states(self):
+        FakeApp.routes[("GET", "/api/states")] = (200, self.HA_STATES)
+
+    def posts(self):
+        return [r for r in FakeApp.requests if r["method"] == "POST"]
+
+    def test_home_lists_devices_but_not_scenes_locks_or_automations(self):
+        self.with_ha_states()
+        result = self.call(tools.home)
+        self.assertEqual([d["id"] for d in result["devices"]], [
+            "cover.joshs_room_josh_north", "cover.reys_room_rey_west",
+            "light.kitchen_kitchen", "light.kitchen_kitchen_1", "switch.wemo_mini",
+        ])
+        self.assertEqual(result["devices"][1], {"id": "cover.reys_room_rey_west", "name": "Rey’s Room Rey West", "state": "open", "position": 100, "battery": 82})
+        self.assertEqual(result["devices"][2], {"id": "light.kitchen_kitchen", "name": "Kitchen", "state": "on", "brightness": 50, "group": True})
+        self.assertIn("unavailable", result["note"])
+        self.assertEqual(FakeApp.requests[0]["auth"], "Bearer ha-token")
+
+    def test_home_filters_by_room_and_kind(self):
+        self.with_ha_states()
+        self.assertEqual([d["id"] for d in self.call(tools.home, {"room": "Rey's room"})["devices"]], ["cover.reys_room_rey_west"])
+        self.assertEqual([d["id"] for d in self.call(tools.home, {"kind": "scene"})["devices"]], ["scene.kitchen_kitchen_relax"])
+        self.assertIn("Nothing matched", self.call(tools.home, {"room": "garage"})["note"])
+        self.assertIn("error", self.call(tools.home, {"kind": "lock"}))
+
+    def test_home_control_sends_one_call_per_kind_of_device(self):
+        self.with_ha_states()
+        FakeApp.routes[("POST", "/api/services/light/turn_off")] = (200, [])
+        FakeApp.routes[("POST", "/api/services/switch/turn_off")] = (200, [])
+        with self.as_asker("mer"):
+            result = self.call(tools.home_control, {"ids": ["light.kitchen_kitchen", "switch.wemo_mini", "light.kitchen_kitchen"], "action": "off"})
+        self.assertEqual([(r["path"], r["body"]) for r in self.posts()], [
+            ("/api/services/light/turn_off", {"entity_id": ["light.kitchen_kitchen"]}),
+            ("/api/services/switch/turn_off", {"entity_id": ["switch.wemo_mini"]}),
+        ])
+        self.assertEqual(result["devices"], ["Kitchen", "Wemo Mini"])
+        self.assertEqual(self.posts()[0]["auth"], "Bearer ha-token")
+
+    def test_home_control_brightness_and_color(self):
+        self.with_ha_states()
+        FakeApp.routes[("POST", "/api/services/light/turn_on")] = (200, [])
+        with self.as_asker("michael"):
+            self.call(tools.home_control, {"ids": ["light.kitchen_kitchen"], "action": "on", "brightness": 40, "color": "Dark  Blue"})
+            self.call(tools.home_control, {"ids": ["light.kitchen_kitchen"], "action": "on", "color": "warm white"})
+        self.assertEqual([r["body"] for r in self.posts()], [
+            {"entity_id": ["light.kitchen_kitchen"], "brightness_pct": 40, "color_name": "darkblue"},
+            {"entity_id": ["light.kitchen_kitchen"], "color_temp_kelvin": 2700},
+        ])
+
+    def test_home_control_shade_position_says_its_on_its_way(self):
+        self.with_ha_states()
+        FakeApp.routes[("POST", "/api/services/cover/set_cover_position")] = (200, [])
+        with self.as_asker("mer"):
+            self.assertIn("error", self.call(tools.home_control, {"ids": ["cover.reys_room_rey_west"], "action": "position"}))
+            result = self.call(tools.home_control, {"ids": ["cover.reys_room_rey_west"], "action": "position", "position": 30})
+        self.assertEqual(self.posts()[0]["body"], {"entity_id": ["cover.reys_room_rey_west"], "position": 30})
+        self.assertIn("on its way", result["tell_them"])
+
+    def test_home_control_refuses_what_it_shouldnt_touch(self):
+        self.with_ha_states()
+        with self.as_asker("michael"):
+            for args in [
+                {"ids": ["lock.front_door"], "action": "off"},
+                {"ids": ["automation.morning"], "action": "off"},
+                {"ids": ["light.not_a_real_light"], "action": "on"},
+                {"ids": ["light.kitchen_kitchen"], "action": "open"},
+                {"ids": ["cover.joshs_room_josh_north"], "action": "close"},
+                {"ids": ["switch.wemo_mini"], "action": "on", "brightness": 50},
+                {"ids": ["light.kitchen_kitchen"], "action": "on", "color": "#ff0000"},
+                {"ids": ["../api/services"], "action": "on"},
+                {"ids": "light.kitchen_kitchen", "action": "on"},
+                {"ids": ["light.kitchen_kitchen"], "action": "restart"},
+            ]:
+                self.assertIn("error", self.call(tools.home_control, args), args)
+        self.assertEqual(self.posts(), [])
+
+    def test_home_control_needs_to_know_whos_asking(self):
+        self.with_ha_states()
+        with self.as_asker(None):
+            self.assertIn("who's asking", self.call(tools.home_control, {"ids": ["light.kitchen_kitchen"], "action": "off"})["error"])
+        self.assertEqual(FakeApp.requests, [])
+
+    def test_home_errors_say_what_to_do(self):
+        FakeApp.routes[("GET", "/api/states")] = (401, {"message": "Unauthorized"})
+        self.assertIn("Tell Michael", self.call(tools.home)["error"])
+        with mock.patch.dict(os.environ, {"BENNY_HA_TOKEN": ""}):
+            self.assertIn("isn't set", self.call(tools.home)["error"])
+
+    def test_home_assistant_refusals_come_back_as_its_message(self):
+        self.with_ha_states()
+        FakeApp.routes[("POST", "/api/services/light/turn_on")] = (400, {"message": "Invalid color name: pinkish"})
+        with self.as_asker("mer"):
+            result = self.call(tools.home_control, {"ids": ["light.kitchen_kitchen"], "action": "on", "color": "pinkish"})
+        self.assertEqual(result["error"], "Invalid color name: pinkish")
 
     # --- errors -----------------------------------------------------------
 

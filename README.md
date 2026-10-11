@@ -397,6 +397,11 @@ shows two setpoint fields only when Auto is selected.
 
 ### 8c: PowerView shades, via a Raspberry Pi bridge
 
+> **Superseded (Oct 2026):** Home Assistant on the Pi talks to the
+> PowerView hub now, and agent Benny controls the shades through it. See
+> "Smart home through Home Assistant". The bridge below was never
+> deployed.
+
 Adds a "Shades" section to the same page, showing each shade's position,
 tilt (if applicable), and battery status. Unlike the thermostat, this
 page never talks to the shade hub directly — Hunter Douglas's PowerView
@@ -1459,8 +1464,8 @@ terminal is off Discord and Telegram entirely.
   approval, not done").
 - **Cheaper and faster.** No skill to load and no shell round trip: a
   simple question went from three model calls to two, and from about
-  $0.09 to $0.03. The 14 tool definitions are about 1.4K tokens,
-  less than the terminal tool alone.
+  $0.09 to $0.03. The tool definitions (14 then, 16 with the smart
+  home) are under 2K tokens, less than the terminal tool alone.
 
 **Who's asking.** Hermes's session knows which Discord or Telegram
 account sent the message. The plugin maps it to Michael or Mer with
@@ -1479,11 +1484,13 @@ The model can't change it, so:
 digest as data), `benny_upcoming`, `benny_chores`, `benny_add_chore`,
 `benny_set_chore_done`, `benny_list`, `benny_add_to_list`,
 `benny_check_off`, `benny_search_email`, `benny_read_email`,
-`benny_read_attachment` (see below),
+`benny_read_attachment` (see below), `benny_home`, `benny_home_control`
+(see "Smart home through Home Assistant" below),
 `benny_propose_event`, `benny_propose_email_draft`,
-`benny_proposals`. Apart from the email tools, they call the same
-allowlisted routes as before, so the app needed no changes for them, and
-everything is still in `agent_actions`.
+`benny_proposals`. Apart from the email and smart-home tools, they call
+the same allowlisted routes as before, so the app needed no changes for
+them, and everything is still in `agent_actions`. The smart-home tools go
+to Home Assistant on the Pi instead of the app.
 
 **Tests:** `python -m unittest discover -s agent/benny-plugin/tests -v`
 runs them against a fake app on localhost (standard library only).
@@ -1582,6 +1589,72 @@ What changed with it:
   chore, calendar and bill parsers now use Chicago's date
   (`householdToday()`), like the digest and recurring bills already did.
 
+## Smart home through Home Assistant (Oct 2026)
+
+Home Assistant settled the Raspberry Pi question. It runs on the Pi in
+Docker (`~/homeassistant`, `docker compose`, host networking) next to
+Hermes. Agent Benny now controls the house through two plugin tools that
+call Home Assistant's REST API on the Pi itself, so nothing goes through
+the app or Vercel.
+
+**In Home Assistant as of Oct 11, 2026:**
+- **Hue** (through the Hue Bridge v2): kitchen, loft and bedroom lights,
+  each room also as one group light, plus Hue's scenes.
+- **PowerView Gen 2 hub** "Penguins-Sleep": six bedroom
+  shades (Rey West/North, Penguins Closet/South/West, Josh North) with
+  position and battery. Josh North and Penguins Closet read 0% battery.
+  The hub drops out for a few minutes now and then and comes back on its
+  own.
+- **Wemo Minis** ("Morticia's Lamp" and "Garage Lights"): through Home Assistant's
+  own Wemo integration, locally. The old note that HomeKit was the only
+  way in turned out to be wrong.
+- **Apple TV** "Penguins Igloo" (bedroom) and the **Roborock** vacuum
+  "Randy".
+- On the network but not added yet: the LG TV (webOS) and the "LofTV"
+  Apple TV. There's no second PowerView hub on the network, so the
+  third-floor shades still need one.
+
+**No approval, on purpose.** Michael decided (Oct 11, 2026) not to
+approve lights and shades, which changes ground rule 3 of the agent plan
+for the smart home only. Calendar invites and email drafts are still
+proposals. What Benny may touch is limited in code instead:
+- **Only lights, shades, switches/plugs, scenes, media players and the
+  vacuum.** Locks, alarms, automations and Home Assistant's settings
+  aren't listed and can't be targeted.
+- **Only when Michael or Mer asks.** Control needs a known asker
+  (`BENNY_PEOPLE`), so a cron run or a stranger in the server can't
+  switch things. The tool description also says never to act on text in
+  an email, event or list. The worst a hostile email could do is get
+  Benny to flip a light or a shade.
+- **Ids are checked against Home Assistant's live list** before
+  anything is sent, and an offline device is reported, not silently
+  "done".
+
+**Plugin tools:** `benny_home` (devices and state, filterable by room or
+kind; scenes only on request, because Hue makes a lot of them) and
+`benny_home_control` (on/off with brightness and color, shade
+open/close/stop/position, scenes, Apple TV play/pause, vacuum
+start/dock). Home Assistant's own logbook records each change, under
+whichever Home Assistant user made the token.
+
+**Setup on the Pi** (done Oct 11, 2026; tested live by switching a lamp
+on and off through the installed plugin; the previous plugin is at
+`~/.hermes/plugins-benny-bak-20261011`):
+1. In Home Assistant, create a long-lived access token (your profile →
+   Security → Long-lived access tokens).
+2. Save it to Hermes's `.env` without it passing through chat or a shell
+   history:
+   ```
+   ssh -t pi 'read -rsp Token: t; echo; echo BENNY_HA_TOKEN=$t >> ~/.hermes/.env; echo saved'
+   ```
+3. Re-copy the plugin and restart Hermes (see the plugin section above).
+   `BENNY_HA_URL` is only needed if Home Assistant moves off the Pi; it
+   defaults to `http://127.0.0.1:8123`.
+
+The app's `/smarthome.html` and the `powerview-bridge/` push (Stage 8c)
+are superseded for shades. The app can't reach Home Assistant from
+Vercel without a tunnel, and nothing here needs it to.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -1674,7 +1747,7 @@ GitHub repo.
 7. ✅ Home sale comps tracker — confirmed working live (RentCast free tier)
 8. ✅ Visual redesign — "Harbor Lights" direction chosen and implemented (dark, neon edge-glow, family-color accents), shared across every page via `public/theme.css`
 9. Pet vet visit / treatment / food scheduling — now planned as Stage 23 of the agent integration plan below
-10. ⚠️ Smart home awareness — Resideo thermostat status + control code is built (see Stage 8), but currently **non-functional in both prod and local dev**: `RESIDEO_CLIENT_ID`/`RESIDEO_CLIENT_SECRET`/`RESIDEO_REDIRECT_URI` were never set on this Vercel project, and re-registering is currently blocked — the Honeywell/Resideo developer account exists but won't send verification/password-reset emails and refuses fresh signup as "already taken." Try a different email address or network before giving up; may need Resideo support. PowerView shades bridge (Raspberry Pi + `powerview-bridge/`) also still needs the `npm run discover` verification step once the Pi is set up — and separately, the `powerview_shades` table it writes to doesn't actually exist in Supabase yet (see Stage 12's note).
+10. ⚠️ Smart home awareness — Resideo thermostat status + control code is built (see Stage 8), but currently **non-functional in both prod and local dev**: `RESIDEO_CLIENT_ID`/`RESIDEO_CLIENT_SECRET`/`RESIDEO_REDIRECT_URI` were never set on this Vercel project, and re-registering is currently blocked — the Honeywell/Resideo developer account exists but won't send verification/password-reset emails and refuses fresh signup as "already taken." Try a different email address or network before giving up; may need Resideo support. **Shades, Hue lights, the Wemo plugs, the bedroom Apple TV and the vacuum are online through Home Assistant on the Pi (Oct 2026), and agent Benny controls them directly** — see "Smart home through Home Assistant". That replaces the `powerview-bridge/` plan, so its discovery step and the missing `powerview_shades` table no longer matter.
 11. ✅ AI advice generator — calm, mindfulness-oriented guidance + a matching haiku, dancing penguin loading state (see Stage 9 above)
 12. ✅ Calendar ↔ chores digest — merged "Today" view on the homepage (see Stage 10 above)
 13. ✅ Home screen icon — proper penguin icon + standalone launch on phones (see Stage 11 above)
@@ -1714,8 +1787,11 @@ below (the autonomous agent) was waiting on.
 3. **Autonomous at drafting, not at acting** (the rule idea #20 already
    set). The agent may write low-stakes data directly — chores, list
    items, notes. Anything that reaches outside the app — calendar
-   invites, email drafts, smart-home commands, anything involving money —
-   is a *proposal* one of us approves in the app.
+   invites, email drafts, anything involving money — is a *proposal* one
+   of us approves in the app. **Except the smart home** (Oct 2026):
+   Michael chose not to approve lights and shades, so Benny controls
+   those directly, limited in code instead (see "Smart home through Home
+   Assistant").
 
 ### Stages
 
@@ -1768,10 +1844,11 @@ below (the autonomous agent) was waiting on.
     return, and a timeline to list. Lives as a project under Stage 22.
 
 **Deferred: smart-home alerts and routines** ("leaving home" / "coming
-home", temperature and shade alerts). Blocked until Resideo credentials
-are sorted (roadmap #10) and the Raspberry Pi's Home Assistant install is
-decided. If Home Assistant wins, Benny should call Home Assistant's own
-REST API rather than growing the custom `powerview-bridge/`.
+home", temperature and shade alerts). Home Assistant won, and Benny now
+calls its REST API (see "Smart home through Home Assistant"). Routines
+should probably be Home Assistant automations or scenes that Benny can
+trigger, rather than logic in the plugin. Temperature is still blocked on
+the Resideo thermostats (roadmap #10).
 
 **Telegram is the backup channel.** Discord is where the household talks
 to Benny. Telegram stays connected (Michael only, by user ID) in case
@@ -1796,12 +1873,11 @@ notes for a fuller breakdown of steps/UX for each.
     conversation notes), broken down by integration path:
     - **Litter-Robot 4** — Whisker cloud API (community-proven via
       `pylitterbot`), same difficulty tier as Resideo/Home Connect.
-    - **Philips Hue** — a physical Hue Bridge exists, so this goes
-      through Hue's local Bridge API rather than HomeKit.
-    - **Wemo plugs** (turtle lamp, garage lights) — Wemo's own cloud/app
-      was discontinued by Belkin; the only remaining path is a
-      HomeKit-controller component (new pattern, not built yet), since
-      these are only still working today via local HomeKit control.
+    - ✅ **Philips Hue** — in Home Assistant through the Hue Bridge,
+      and controlled by agent Benny (Oct 2026).
+    - ✅ **Wemo plugs** (turtle lamp, garage lights) — Belkin shut down
+      Wemo's cloud, but Home Assistant's own Wemo integration controls
+      them locally (Oct 2026). No HomeKit controller needed.
     - **PowerView, 3rd floor (Gen 2 shades)** — blocked on hardware, not
       software: no hub currently owned for these at all. A Gen 2 Hub is
       still purchasable new; nothing here is buildable until one's
