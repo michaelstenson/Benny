@@ -246,6 +246,98 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(result["error"], "No list by that name. Benny can't create lists.")
         self.assertEqual(result["available"], [{"list": "groceries", "name": "Groceries", "kind": "items"}])
 
+    # --- pets -------------------------------------------------------------
+
+    PET_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    PETS = {
+        "today": "2026-10-16",
+        "departure": {"date": "2027-09-20", "confirmed": False},
+        "pets": [
+            {
+                "id": PET_ID, "name": "Quincy", "species": "dog", "age": "5 years", "travels": True,
+                "microchip_number": "985112004567890", "breed": None, "caretaker": "mer",
+                "latest_weight": {"weight_lb": 61.4, "on": "2026-10-10"},
+                "vaccinations": [{"vaccine": "Rabies", "rabies": True, "given_on": "2026-07-01", "valid_until": "2029-07-01", "batch": "B456"}],
+                "visits": [{"visited_on": "2026-10-10", "reason": "Annual exam", "weight_lb": 61.4}],
+                "medications": [
+                    {"name": "Heartgard", "dose": "1 chew", "every": "monthly", "next_due": "2026-11-01", "active": True},
+                    {"name": "Antibiotic", "every": "daily", "ends_on": "2026-09-01", "active": False},
+                ],
+                "due": [{"id": "t", "title": "Quincy: Heartgard (1 chew)", "due_date": "2026-11-01"}],
+                "travel": {"ready": False, "items": [
+                    {"status": "ok", "text": "ISO chip 985112004567890."},
+                    {"status": "todo", "text": "Add the date the chip went in."},
+                    {"status": "info", "text": "EU health certificate: ..."},
+                ]},
+            },
+            {"id": "bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee", "name": "Morticia", "species": "turtle", "travels": False,
+             "vaccinations": [], "visits": [], "medications": [], "due": [], "travel": None},
+        ],
+    }
+
+    def test_pets_summary_is_slim_and_lists_what_to_fix(self):
+        FakeApp.routes[("GET", "/api/pets")] = (200, self.PETS)
+        result = self.call(tools.pets)
+        quincy, morticia = result["pets"]
+        self.assertEqual(quincy["rabies"], {"given_on": "2026-07-01", "valid_until": "2029-07-01"})
+        self.assertEqual(quincy["meds"], [{"name": "Heartgard", "dose": "1 chew", "every": "monthly", "next_due": "2026-11-01"}])
+        self.assertEqual(quincy["eu_travel"], {"ready": False, "to_fix": ["Add the date the chip went in."]})
+        self.assertNotIn("breed", quincy)
+        self.assertEqual(morticia, {"name": "Morticia", "species": "turtle", "meds": [], "due": [], "moving": False})
+
+    def test_one_pet_by_name_has_its_history(self):
+        FakeApp.routes[("GET", "/api/pets")] = (200, self.PETS)
+        quincy = self.call(tools.pets, {"pet": "quincy"})["pet"]
+        self.assertEqual(quincy["vaccinations"][0]["batch"], "B456")
+        self.assertEqual(len(quincy["medications"]), 2)
+        self.assertEqual(len(quincy["eu_travel"]["all"]), 3)
+        missing = self.call(tools.pets, {"pet": "Rex"})
+        self.assertEqual(missing["error"], "No pet called Rex.")
+        self.assertEqual(missing["pets"], ["Quincy", "Morticia"])
+
+    def test_log_a_visit(self):
+        FakeApp.routes[("GET", "/api/pets")] = (200, self.PETS)
+        FakeApp.routes[("POST", f"/api/pets/{self.PET_ID}/visits")] = (201, {"visit": {}, "reminder": None})
+        result = self.call(tools.log_pet, {"pet": "Quincy", "kind": "visit", "date": "2026-10-10", "reason": " Annual  exam", "weight_lb": 61.4})
+        self.assertEqual(FakeApp.requests[-1]["body"], {"visited_on": "2026-10-10", "reason": "Annual exam", "weight_lb": 61.4})
+        self.assertIsNone(result["reminder"])
+        self.assertIn("Read back", result["tell_them"])
+
+    def test_log_a_rabies_shot_returns_its_reminder(self):
+        FakeApp.routes[("GET", "/api/pets")] = (200, self.PETS)
+        FakeApp.routes[("POST", f"/api/pets/{self.PET_ID}/vaccinations")] = (
+            201, {"vaccination": {}, "reminder": {"id": "x", "title": "Quincy: rabies due", "due_date": "2029-06-17", "repeat": None}}
+        )
+        result = self.call(tools.log_pet, {
+            "pet": "Quincy", "kind": "vaccination", "vaccine": "Rabies", "date": "2026-07-01",
+            "valid_until": "2029-07-01", "batch": "B456",
+        })
+        self.assertEqual(FakeApp.requests[-1]["body"], {
+            "vaccine": "Rabies", "given_on": "2026-07-01", "rabies": True, "batch": "B456", "valid_until": "2029-07-01",
+        })
+        self.assertEqual(result["reminder"], {"title": "Quincy: rabies due", "due_date": "2029-06-17"})
+        self.assertNotIn("rabies", result["logged"])
+
+    def test_log_pet_checks_its_inputs_before_calling_the_app(self):
+        bad = [
+            {"pet": "Quincy", "kind": "surgery"},
+            {"kind": "visit", "date": "2026-10-10", "reason": "x"},
+            {"pet": "Quincy", "kind": "visit", "date": "10/10/2026", "reason": "x"},
+            {"pet": "Quincy", "kind": "visit", "date": "2026-10-10"},
+            {"pet": "Quincy", "kind": "visit", "date": "2026-10-10", "reason": "x", "weight_lb": "heavy"},
+            {"pet": "Quincy", "kind": "vaccination", "vaccine": "Rabies"},
+            {"pet": "Quincy", "kind": "medication", "name": "Heartgard", "every": "hourly"},
+        ]
+        for args in bad:
+            self.assertIn("error", self.call(tools.log_pet, args), args)
+        self.assertEqual(FakeApp.requests, [])
+
+    def test_log_pet_for_an_unknown_pet_lists_the_real_ones(self):
+        FakeApp.routes[("GET", "/api/pets")] = (200, self.PETS)
+        result = self.call(tools.log_pet, {"pet": "Rex", "kind": "visit", "date": "2026-10-10", "reason": "x"})
+        self.assertEqual(result["pets"], ["Quincy", "Morticia"])
+        self.assertEqual([r["method"] for r in FakeApp.requests], ["GET"])
+
     # --- proposals --------------------------------------------------------
 
     def test_email_draft_goes_in_the_askers_own_gmail(self):

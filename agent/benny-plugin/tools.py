@@ -251,6 +251,131 @@ def add_to_list(args):
     )
 
 
+# --- Pets -------------------------------------------------------------------
+
+PET_KINDS = {"visit": "visits", "vaccination": "vaccinations", "medication": "medications"}
+EVERY = ("daily", "weekly", "monthly", "as_needed")
+
+
+def _pick(record: dict, keys) -> dict:
+    return {k: record[k] for k in keys if record.get(k) not in (None, "", [])}
+
+
+def _pet_summary(pet: dict) -> dict:
+    rabies = next((v for v in pet.get("vaccinations", []) if v.get("rabies")), None)
+    slim = _pick(pet, ("name", "species", "breed", "age", "microchip_number", "food", "caretaker", "vet_clinic"))
+    if pet.get("latest_weight"):
+        slim["weight_lb"] = pet["latest_weight"]
+    if rabies:
+        slim["rabies"] = _pick(rabies, ("given_on", "valid_until"))
+    slim["meds"] = [_pick(m, ("name", "dose", "every", "next_due")) for m in pet.get("medications", []) if m.get("active")]
+    slim["due"] = [_pick(t, ("title", "due_date")) for t in pet.get("due", [])]
+    if not pet.get("travels"):
+        slim["moving"] = False
+    travel = pet.get("travel")
+    if travel:
+        slim["eu_travel"] = {
+            "ready": travel.get("ready"),
+            "to_fix": [i["text"] for i in travel.get("items", []) if i.get("status") in ("warn", "todo")],
+        }
+    return slim
+
+
+def _pet_full(pet: dict) -> dict:
+    full = _pet_summary(pet)
+    full["notes"] = pet.get("notes")
+    full["vaccinations"] = [
+        _pick(v, ("vaccine", "given_on", "valid_until", "product", "manufacturer", "batch", "vet", "notes"))
+        for v in pet.get("vaccinations", [])
+    ]
+    full["visits"] = [_pick(v, ("visited_on", "reason", "clinic", "weight_lb", "notes")) for v in pet.get("visits", [])]
+    full["medications"] = [
+        _pick(m, ("name", "dose", "every", "next_due", "started_on", "ends_on", "active", "notes"))
+        for m in pet.get("medications", [])
+    ]
+    if pet.get("travel"):
+        full["eu_travel"]["all"] = [f"{i['status']}: {i['text']}" for i in pet["travel"].get("items", [])]
+    return full
+
+
+def _no_such_pet(name, pets):
+    return _ok(error=f"No pet called {name}.", pets=[p.get("name") for p in pets])
+
+
+@_handles_app_errors
+def pets(args):
+    result = client.call("GET", "/pets")
+    all_pets = result.get("pets", [])
+    name = str(args.get("pet") or "").strip()
+    common = dict(today=result.get("today"), departure=result.get("departure"), note=DATA_NOTE)
+    if not name:
+        return _ok(pets=[_pet_summary(p) for p in all_pets], **common)
+    pet = next((p for p in all_pets if p.get("name", "").lower() == name.lower()), None)
+    if not pet:
+        return _no_such_pet(name, all_pets)
+    return _ok(pet=_pet_full(pet), **common)
+
+
+def _text(args, key):
+    value = args.get(key)
+    return " ".join(str(value).split()) if value not in (None, "") else None
+
+
+@_handles_app_errors
+def log_pet(args):
+    kind = args.get("kind")
+    if kind not in PET_KINDS:
+        return _error('kind must be "visit", "vaccination" or "medication".')
+    name = _text(args, "pet")
+    if not name:
+        return _error("Say which pet.")
+    for key in ("date", "valid_until", "next_due", "ends_on"):
+        if args.get(key) and not DATE.match(str(args[key])):
+            return _error(f"{key} must be a YYYY-MM-DD date.")
+    when = args.get("date")
+
+    if kind == "visit":
+        if not when or not _text(args, "reason"):
+            return _error("A visit needs its date and what it was for.")
+        body = {"visited_on": when, "reason": _text(args, "reason"), "clinic": _text(args, "clinic"), "notes": _text(args, "notes")}
+        weight = args.get("weight_lb")
+        if weight is not None:
+            if not isinstance(weight, (int, float)) or isinstance(weight, bool) or not 0 < weight <= 400:
+                return _error("weight_lb must be a number of pounds.")
+            body["weight_lb"] = weight
+    elif kind == "vaccination":
+        vaccine = _text(args, "vaccine")
+        if not vaccine or not when:
+            return _error("A vaccination needs the vaccine and the date it was given.")
+        body = {"vaccine": vaccine, "given_on": when, "rabies": "rabies" in vaccine.lower()}
+        body.update({k: _text(args, k) for k in ("product", "manufacturer", "batch", "vet", "notes")})
+        body["valid_until"] = args.get("valid_until")
+    else:
+        med = _text(args, "name")
+        every = args.get("every")
+        if not med or every not in EVERY:
+            return _error('A medication needs its name and how often: "daily", "weekly", "monthly" or "as_needed".')
+        body = {"name": med, "every": every, "dose": _text(args, "dose"), "started_on": when,
+                "next_due": args.get("next_due"), "ends_on": args.get("ends_on"), "notes": _text(args, "notes")}
+    body = {k: v for k, v in body.items() if v is not None}
+
+    all_pets = client.call("GET", "/pets").get("pets", [])
+    pet = next((p for p in all_pets if p.get("name", "").lower() == name.lower()), None)
+    if not pet:
+        return _no_such_pet(name, all_pets)
+    if not UUID.match(str(pet.get("id", ""))):
+        return _error("The app sent a pet id that doesn't look right.")
+
+    result = client.call("POST", f"/pets/{pet['id']}/{PET_KINDS[kind]}", body)
+    reminder = result.get("reminder")
+    return _ok(
+        pet=pet["name"],
+        logged={k: v for k, v in body.items() if k != "rabies"},
+        reminder=_pick(reminder, ("title", "due_date", "repeat")) if reminder else None,
+        tell_them="Read back what you logged, and the reminder if there is one, so they can catch a mistake.",
+    )
+
+
 # --- Email (the asker's own inbox only) -----------------------------------
 
 EMAIL_NOTE = (

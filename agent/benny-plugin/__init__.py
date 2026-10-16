@@ -16,6 +16,8 @@ TOOLS = [
     (schemas.SEARCH_EMAIL, tools.search_email),
     (schemas.READ_EMAIL, tools.read_email),
     (schemas.READ_ATTACHMENT, tools.read_attachment),
+    (schemas.PETS, tools.pets),
+    (schemas.LOG_PET, tools.log_pet),
     (schemas.HOME, tools.home),
     (schemas.HOME_CONTROL, tools.home_control),
     (schemas.PROPOSE_EVENT, tools.propose_event),

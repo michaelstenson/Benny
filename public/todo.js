@@ -313,7 +313,7 @@ function settingsPanel(list) {
       <option value="items" ${list.mode === 'items' ? 'selected' : ''}>Plain items, one per comma, duplicates skipped</option>
     </select>
     <div class="hl-todo-settings-actions">
-      ${list.slug === DEFAULT_LIST ? '<span></span>' : '<button type="button" class="hl-link" data-delete-list style="background:none;border:none;font:inherit;font-size:13px;padding:0">Delete list</button>'}
+      ${[DEFAULT_LIST, 'pets'].includes(list.slug) ? '<span></span>' : '<button type="button" class="hl-link" data-delete-list style="background:none;border:none;font:inherit;font-size:13px;padding:0">Delete list</button>'}
       <button class="hl-button" style="padding:8px 16px">Save</button>
     </div>
   </form>`;

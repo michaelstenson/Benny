@@ -39,6 +39,7 @@ benny/
 │   │   ├── actionError.js      # an Error that carries its HTTP status, for shared write paths (Stage 21)
 │   │   ├── recurringBills.js   # next-due-date math for recurring bills, in Chicago time (Stage 20)
 │   │   ├── moveTasks.js        # move tracker rules: repeats, the Summit agenda, decision warnings (Stage 22)
+│   │   ├── petCare.js          # pet care rules: record fields, Pets-list reminders, the EU travel checklist (Stage 23)
 │   │   └── weatherClient.js    # today's forecast from Open-Meteo, no API key (Stage 20)
 │   └── routes/
 │       ├── hello.js       # GET /api/hello — the hello-world endpoint
@@ -52,7 +53,8 @@ benny/
 │       ├── session.js     # /auth/login, /verify, /confirm, /logout — signing in to Benny itself (Stage 17)
 │       ├── recurringBills.js # /api/recurring-bills — what's due when (Stage 20)
 │       ├── proposals.js   # /api/proposals — "Benny suggests," approve or dismiss (Stage 21)
-│       └── projects.js    # /api/projects, /tasks, /decisions, /key-dates, /log — the move tracker (Stage 22)
+│       ├── projects.js    # /api/projects, /tasks, /decisions, /key-dates, /log — the move tracker (Stage 22)
+│       └── pets.js        # /api/pets + their vaccinations, visits, medications (Stage 23)
 ├── public/
 │   ├── index.html         # the page you see at localhost:3000
 │   ├── app.js              # browser-side JS that calls /api/hello
@@ -70,11 +72,13 @@ benny/
 │   ├── move.html / move.js # the Netherlands move plan + Penguin Summit agenda (Stage 22)
 │   ├── move-shared.js      # date labels + the Everyone/Michael/Mer filter, shared with the homepage card
 │   ├── log.html / log.js   # the decision log (Stage 22)
+│   ├── pets.html / pets.js # pet records, reminders and the EU travel checklist (Stage 23)
 │   ├── auth-guard.js       # loaded on every signed-in page; bounces to /login.html on 401
 │   └── escape.js           # escapeHtml() for titles that came from outside (Stage 18)
 ├── agent/benny-plugin/      # Hermes plugin: Benny the agent's tools for this app's API
 ├── agent/scripts/           # scripts Hermes runs on the Pi (the morning brief)
-├── scripts/                 # one-time setup: the Stage 22 and To-Do migrations + the roadmap importer
+├── scripts/                 # one-time setup: the Stage 22, To-Do and Stage 23 migrations + the roadmap importer
+├── tests/                   # `npm test`: node:test checks of the pet care rules (Stage 23)
 ├── powerview-bridge/        # standalone script that runs on a Raspberry Pi at home,
 │                             # not part of the Vercel app — see its own README.md
 ├── .env.example            # template for required environment variables
@@ -1492,7 +1496,7 @@ The model can't change it, so:
 digest as data), `benny_upcoming`, `benny_todos`, `benny_add_todo`,
 `benny_add_to_list`, `benny_set_todo_done` (these four replaced the five
 chore and list tools in Oct 2026, see "To-Do"), `benny_search_email`, `benny_read_email`,
-`benny_read_attachment` (see below), `benny_home`, `benny_home_control`
+`benny_read_attachment` (see below), `benny_pets`, `benny_log_pet` (see "Stage 23: Pet care"), `benny_home`, `benny_home_control`
 (see "Smart home through Home Assistant" below),
 `benny_propose_event`, `benny_propose_email_draft`,
 `benny_proposals`. Apart from the email and smart-home tools, they call
@@ -1765,6 +1769,117 @@ database):
 All four steps were done on Oct 16, 2026. The plugin from before To-Do
 is backed up at `~/.hermes/plugins-benny-bak-20261016` on the Pi.
 
+## Stage 23: Pet care
+
+`/pets.html` keeps Quincy's, Rey's, Poe's and Morticia's records: a
+profile with the microchip, plus vaccinations, vet visits and
+medications. Anything that comes due becomes a to-do in To-Do's **Pets**
+list. For the three moving to the Netherlands, there's an **EU travel
+checklist** that reads their records against the entry rules.
+
+**The rules**, checked Oct 16, 2026 against the USDA APHIS Netherlands
+page (last updated Sept 2, 2026), the NVWA's page on travelling from
+non-EU countries, and the EU's pet-movement pages:
+- **Chip first.** An ISO chip (15 digits) goes in before, or on the
+  same day as, the rabies shot, and the vet scans it first. A rabies shot
+  from before the chip doesn't count.
+- **Rabies** must be given at 12 weeks old or older. A first shot
+  (including one after a lapse) is valid 21 days later. Boosters have to
+  come before the last shot lapses, or the next shot is a new first
+  shot.
+- **No rabies blood (titer) test** coming from the US. APHIS lists none,
+  and the US was on the EU's exempt list in 577/2013 Part 2. The current
+  list is in EU 2026/636 Annex II, which couldn't be opened that day, so
+  the relocator (P-03) confirms it.
+- **New certificate since Oct 1, 2026.** The EU's new rules (2026/131 and
+  2026/705) bring a new animal health certificate. A USDA-accredited vet
+  fills it in and submits it through VEHCS. **USDA endorses it within 10
+  days before you land in the EU.** You sign the owner's declaration, and
+  the endorsed original travels with the pets.
+- **Non-commercial:** 5 pets or fewer, and the owner travels within 5
+  days of them. On arrival, report to Customs at a travellers' entry
+  point (Schiphol).
+- **No tapeworm treatment** for the Netherlands. It's only needed for
+  Finland, Ireland, Malta and Norway.
+- **After landing:** a dog staying more than 3 months is registered in a
+  Dutch dog database within 2 weeks. Cats aren't required to be
+  registered yet; the Dutch government plans to make cat chipping
+  mandatory from Jan 1, 2028.
+
+These live in `server/lib/petCare.js`, and `npm test` checks them
+(`tests/petCare.test.js`). The checklist shows, per pet:
+- whether the chip is ISO and has a date
+- whether the latest unbroken run of rabies shots started after the chip
+  and at 12 weeks or older, and is still valid when you land
+- whether a first shot is valid by departure
+- whether the product, manufacturer and batch the certificate asks for
+  are filled in
+- the certificate window, worked out from the move's departure key date
+  (labelled "proposed" until D3 confirms it), and the dog-registration
+  deadline
+
+Morticia stays with Joe, so `travels` is off for her and she gets no
+checklist. Her page holds her care sheet in the notes (P-22).
+
+**Reminders** are ordinary to-dos in the Pets list, so they show up in My
+Day, Planned, the morning brief and Benny's to-do tools. The server
+writes them and links each one back to its record (`reminder_todo_id`):
+- A vaccination with an expiry date gets a reminder due two weeks before
+  it lapses, for the pet's **caretaker** (or either of us). Only the
+  latest shot of each vaccine keeps one: logging the new rabies shot
+  ticks the old reminder off, and logging an old shot for the history
+  doesn't create a reminder.
+- Editing a shot's dates updates its reminder. Editing only its notes or
+  batch doesn't bring back a reminder you'd already ticked off.
+- A scheduled medication (daily, weekly or monthly) gets a repeating
+  to-do. **Stop** makes yesterday its last day and ticks the reminder
+  off.
+- Ticking a reminder off in To-Do records nothing on its own. The new
+  shot gets logged on the Pets page (or by Benny), and that closes the
+  old reminder.
+- Any to-do in the Pets list that names a pet ("Quincy: order food") also
+  shows on that pet's page.
+
+**Routes** (`server/routes/pets.js`):
+
+| Route | Agent? |
+|---|---|
+| `GET /api/pets`: every pet with its records, open reminders, latest weight and travel checklist | ✅ |
+| `GET /api/pets/:id`: one pet, same shape | ✅ |
+| `POST /api/pets/:id/vaccinations`, `/visits`, `/medications` | ✅ |
+| `POST /api/pets`, `PATCH /api/pets/:id`, `DELETE /api/pets/:id` | ❌ app only |
+| `PATCH`/`DELETE /api/pet-vaccinations/:id`, `/api/pet-visits/:id`, `/api/pet-medications/:id` | ❌ app only |
+
+Benny can read and log, but editing a record or a pet's profile stays in
+the app, so a chip number can't be changed from Discord. The Pets list
+can't be deleted from To-Do, the same as Chores.
+
+**Benny's tools:**
+- `benny_pets`: with no pet, a summary of each (chip, age, weight, rabies
+  valid until, meds, what's due, and what the travel checklist wants
+  fixed). With a pet's name, its full record.
+- `benny_log_pet` logs a visit, vaccination or medication when asked. It
+  can work from a vet email or PDF Benny has read with
+  `benny_read_email`/`benny_read_attachment`, logging only what the
+  document states, and reads back what it logged, including any
+  reminder.
+
+**Move plan:** the migration rewrote P-09's notes for the new
+certificate and added two tasks:
+- **P-13** (Dec 2026, critical): enter each pet's chip and rabies
+  records here and clear the checklist, while there's still time for a
+  new first shot.
+- **P-14** (pinned to departure, Sep 21 – Oct 4, 2027): register
+  Quincy in a Dutch dog database.
+
+**Schema change** (`scripts/stage23_pet_care.sql`, applied as the
+`stage23_pet_care` migration):
+- `pets`, `pet_vaccinations`, `pet_visits` and `pet_medications`, with
+  RLS on and no policies, so they're server-only.
+- The four pets were seeded with just their name and species. The rest
+  is filled in on the page.
+- The Pets list (🐾, a "tasks" list) was added to To-Do.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -1856,7 +1971,7 @@ GitHub repo.
 6. ✅ Deployed live to Vercel
 7. ✅ Home sale comps tracker — confirmed working live (RentCast free tier)
 8. ✅ Visual redesign — "Harbor Lights" direction chosen and implemented (dark, neon edge-glow, family-color accents), shared across every page via `public/theme.css`
-9. Pet vet visit / treatment / food scheduling — now planned as Stage 23 of the agent integration plan below
+9. ✅ Pet vet visit / treatment / food scheduling — built as Stage 23 (see "Stage 23: Pet care" above)
 10. ⚠️ Smart home awareness — Resideo thermostat status + control code is built (see Stage 8), but currently **non-functional in both prod and local dev**: `RESIDEO_CLIENT_ID`/`RESIDEO_CLIENT_SECRET`/`RESIDEO_REDIRECT_URI` were never set on this Vercel project, and re-registering is currently blocked — the Honeywell/Resideo developer account exists but won't send verification/password-reset emails and refuses fresh signup as "already taken." Try a different email address or network before giving up; may need Resideo support. **Shades, Hue lights, the Wemo plugs, the bedroom Apple TV and the vacuum are online through Home Assistant on the Pi (Oct 2026), and agent Benny controls them directly** — see "Smart home through Home Assistant". That replaces the `powerview-bridge/` plan, so its discovery step and the missing `powerview_shades` table no longer matter.
 11. ✅ AI advice generator — calm, mindfulness-oriented guidance + a matching haiku, dancing penguin loading state (see Stage 9 above)
 12. ✅ Calendar ↔ chores digest — merged "Today" view on the homepage (see Stage 10 above)
@@ -1938,7 +2053,7 @@ below (the autonomous agent) was waiting on.
     decide-by dates, a decision log, and move tasks on the Timeline. The
     home sale is a workstream of the move rather than its own project.
     Still to come: the agent's weekly review once it has access.
-23. **Pet care** (roadmap #9) — `pets`, `vet_visits`, `vaccinations`, and
+23. ✅ **Pet care** (see the "Stage 23: Pet care" section above; built Oct 16, 2026, and the rules were checked against APHIS, NVWA and the EU that day) — `pets`, `vet_visits`, `vaccinations`, and
     `medications` for Poe, Rey, and Quincy. EU import timing rules become
     tasks on the Netherlands move (pinned to departure); start roughly 9 months before
     the move. Verify the rules against official USDA APHIS / Dutch

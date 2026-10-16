@@ -38,6 +38,12 @@ const AGENT_ROUTES = [
   { method: 'GET', path: /^\/lists\/[a-z0-9-]+\/items$/ },
   { method: 'POST', path: /^\/lists\/[a-z0-9-]+\/items$/ },
   { method: 'PATCH', path: /^\/list-items\/[0-9a-f-]{36}$/ },
+  // Pet care (Stage 23): read everything, and log a new visit, shot or
+  // medication when asked. Editing or deleting records, and changing a
+  // pet's profile (its chip number), stay app-only.
+  { method: 'GET', path: /^\/pets$/ },
+  { method: 'GET', path: /^\/pets\/[0-9a-f-]{36}$/ },
+  { method: 'POST', path: /^\/pets\/[0-9a-f-]{36}\/(vaccinations|visits|medications)$/ },
   // Proposals inbox (Stage 21): propose and check on proposals. Approve
   // and reject are left off on purpose — only a signed-in person can
   // turn a proposal into a real calendar event or Gmail draft.

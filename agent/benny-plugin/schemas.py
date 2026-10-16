@@ -165,6 +165,42 @@ HOME_CONTROL = tool(
     ["ids", "action"],
 )
 
+PETS = tool(
+    "benny_pets",
+    "Pet records from the app: Quincy (dog), Rey and Poe (cats), Morticia (box turtle, staying with Joe). "
+    "No pet: a summary of each (chip, age, weight, rabies valid until, meds, what's due, EU travel "
+    "checklist gaps). With a pet's name: its full record of shots, vet visits and meds.",
+    {"pet": {"type": "string", "description": "A pet's name. Leave out for all of them."}},
+)
+
+LOG_PET = tool(
+    "benny_log_pet",
+    "Log a vet visit, vaccination or medication for a pet, only when Michael or Mer asks. From a vet "
+    "email or PDF, read it first and log only what it states; never guess dates or batch numbers. "
+    "Logging a shot with an expiry, or a scheduled med, also puts a reminder in To-Do's Pets list.",
+    {
+        "pet": {"type": "string"},
+        "kind": {"type": "string", "enum": ["visit", "vaccination", "medication"]},
+        "date": {"type": "string", "description": "YYYY-MM-DD: the visit, the day the shot was given, or the day a med started."},
+        "reason": {"type": "string", "description": "visit: what it was for."},
+        "clinic": {"type": "string", "description": "visit"},
+        "weight_lb": {"type": "number", "description": "visit"},
+        "vaccine": {"type": "string", "description": "vaccination, e.g. Rabies, DHPP, FVRCP."},
+        "valid_until": {"type": "string", "description": "vaccination: YYYY-MM-DD it expires."},
+        "product": {"type": "string", "description": "vaccination (rabies: for the EU certificate)"},
+        "manufacturer": {"type": "string", "description": "vaccination"},
+        "batch": {"type": "string", "description": "vaccination: batch/lot number"},
+        "vet": {"type": "string", "description": "vaccination: who gave it"},
+        "name": {"type": "string", "description": "medication"},
+        "dose": {"type": "string", "description": "medication"},
+        "every": {"type": "string", "enum": ["daily", "weekly", "monthly", "as_needed"], "description": "medication"},
+        "next_due": {"type": "string", "description": "medication: YYYY-MM-DD of the next dose."},
+        "ends_on": {"type": "string", "description": "medication: YYYY-MM-DD of the last day."},
+        "notes": {"type": "string"},
+    },
+    ["pet", "kind"],
+)
+
 PROPOSALS = tool(
     "benny_proposals",
     "Proposals waiting for approval. include_decided shows the 50 most recent with what happened, to "

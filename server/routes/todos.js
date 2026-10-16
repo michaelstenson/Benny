@@ -280,9 +280,11 @@ todosRouter.patch('/lists/:slug', async (req, res) => {
 });
 
 // DELETE /api/lists/:slug — the list and every to-do on it. App-only, and
-// never Chores, where the smart views add to.
+// never Chores (where the smart views add to) or Pets (where pet care's
+// reminders go, Stage 23).
+const KEPT_LISTS = { [DEFAULT_LIST]: 'Chores', pets: 'Pets' };
 todosRouter.delete('/lists/:slug', async (req, res) => {
-  if (req.params.slug === DEFAULT_LIST) return fail(res, 400, "Chores can't be deleted.");
+  if (KEPT_LISTS[req.params.slug]) return fail(res, 400, `${KEPT_LISTS[req.params.slug]} can't be deleted.`);
   try {
     const list = await findList(req.params.slug);
     if (!list) return fail(res, 404, 'No list by that name.');
