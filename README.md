@@ -1880,6 +1880,10 @@ certificate and added two tasks:
   is filled in on the page.
 - The Pets list (🐾, a "tasks" list) was added to To-Do.
 
+The plugin was reinstalled on the Pi on Oct 16, 2026 (16 tools). The one
+from before Stage 23 is backed up at
+`~/.hermes/plugins-benny-bak-20261016-stage23`.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
