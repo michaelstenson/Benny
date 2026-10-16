@@ -1762,6 +1762,9 @@ database):
 4. Reinstall the plugin on the Pi (see "Benny plugin for Hermes" above)
    and restart Hermes.
 
+All four steps were done on Oct 16, 2026. The plugin from before To-Do
+is backed up at `~/.hermes/plugins-benny-bak-20261016` on the Pi.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
