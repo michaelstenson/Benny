@@ -27,7 +27,8 @@ benny/
 │   │   ├── googleClient.js     # builds the Google OAuth2 client
 │   │   ├── tokenStore.js       # reads/writes your Google tokens in Supabase
 │   │   ├── anthropicClient.js  # one shared Claude client
-│   │   ├── choreParser.js      # turns free text into {title, assignee, due_date} via Claude tool use
+│   │   ├── todoParser.js       # turns free text into {title, assignee, due_date} via Claude tool use (was choreParser.js)
+│   │   ├── todos.js            # To-Do rules: what a change may do, when a repeating to-do comes due again
 │   │   ├── billParser.js       # turns free text into {category, amount, billing_month} via Claude tool use
 │   │   ├── rentcastClient.js   # calls RentCast's AVM endpoint for a home value + comps
 │   │   ├── compsSummary.js     # turns that data into a short plain-language paragraph via Claude
@@ -43,13 +44,12 @@ benny/
 │       ├── hello.js       # GET /api/hello — the hello-world endpoint
 │       ├── auth.js        # /auth/google + /auth/google/callback — the Google sign-in handshake
 │       ├── calendar.js    # /api/calendar/status + /api/calendar/events
-│       ├── chores.js      # /api/chores (GET/POST) + /api/chores/:id (PATCH)
+│       ├── todos.js       # /api/todos + /api/lists — To-Do: chores, groceries and any other list (Oct 2026)
 │       ├── bills.js       # /api/bills (GET/POST) — includes the per-category summary
 │       ├── comps.js       # /api/comps (GET) + /api/comps/refresh (GET, cron-only)
 │       ├── resideoAuth.js # /auth/resideo + /auth/resideo/callback — the Resideo sign-in handshake
 │       ├── smarthome.js   # /api/smarthome/status, /thermostats (GET+PATCH), /shades
 │       ├── session.js     # /auth/login, /verify, /confirm, /logout — signing in to Benny itself (Stage 17)
-│       ├── lists.js       # /api/lists + items — shared lists like groceries (Stage 19)
 │       ├── recurringBills.js # /api/recurring-bills — what's due when (Stage 20)
 │       ├── proposals.js   # /api/proposals — "Benny suggests," approve or dismiss (Stage 21)
 │       └── projects.js    # /api/projects, /tasks, /decisions, /key-dates, /log — the move tracker (Stage 22)
@@ -58,8 +58,8 @@ benny/
 │   ├── app.js              # browser-side JS that calls /api/hello
 │   ├── calendar.html       # the calendar page
 │   ├── calendar.js         # browser-side JS that calls /api/calendar/events
-│   ├── chores.html         # the chores page
-│   ├── chores.js           # browser-side JS for adding/listing/completing chores
+│   ├── todo.html / todo.js # To-Do: My Day, Important, Planned, Michael/Mer, and every list (Oct 2026)
+│   ├── chores.html / lists.html # redirects to todo.html, for old bookmarks and home-screen icons
 │   ├── bills.html          # the bills page
 │   ├── bills.js            # browser-side JS for adding bills and rendering the summary
 │   ├── comps.html          # the home comps page
@@ -67,7 +67,6 @@ benny/
 │   ├── smarthome.html      # the smart home page
 │   ├── smarthome.js        # browser-side JS: thermostat status/control + shade status
 │   ├── login.html / login.js # sign-in page: email → code (Stage 17)
-│   ├── lists.html / lists.js # shared lists page — groceries, with tabs once there's more than one (Stage 19)
 │   ├── move.html / move.js # the Netherlands move plan + Penguin Summit agenda (Stage 22)
 │   ├── move-shared.js      # date labels + the Everyone/Michael/Mer filter, shared with the homepage card
 │   ├── log.html / log.js   # the decision log (Stage 22)
@@ -75,7 +74,7 @@ benny/
 │   └── escape.js           # escapeHtml() for titles that came from outside (Stage 18)
 ├── agent/benny-plugin/      # Hermes plugin: Benny the agent's tools for this app's API
 ├── agent/scripts/           # scripts Hermes runs on the Pi (the morning brief)
-├── scripts/                 # one-time setup: the Stage 22 migration + the roadmap importer
+├── scripts/                 # one-time setup: the Stage 22 and To-Do migrations + the roadmap importer
 ├── powerview-bridge/        # standalone script that runs on a Raspberry Pi at home,
 │                             # not part of the Vercel app — see its own README.md
 ├── .env.example            # template for required environment variables
@@ -186,6 +185,10 @@ just displaying them, would each need their own, broader scope granted
 deliberately later — neither is needed for read-only calendar display.
 
 ## Stage 3: Natural-language chores
+
+> **Replaced by To-Do (Oct 2026).** Chores is now a list in To-Do, and
+> `choreParser.js` became `todoParser.js`. See "To-Do: chores and lists in
+> one place" below. This section is kept as the history of how it started.
 
 Adds a `/chores.html` page: type something like "remind Mer to water the
 plants Thursday", and Benny turns it into a real chore with a title,
@@ -1032,6 +1035,11 @@ Vercel and redeploy.
 
 ## Stage 19: Shared lists (groceries)
 
+> **Folded into To-Do (Oct 2026).** Groceries is now an "items" list in
+> To-Do, and `list_items` was copied into `todos`. The add-items route
+> and its duplicate rule below still work the same way. See "To-Do:
+> chores and lists in one place" below.
+
 A shared grocery list that either of us can add to from the app, or by
 telling agent Benny in Discord ("Benny, add oat milk and eggs"). It's
 the first thing built with the agent in mind. It's low stakes and used
@@ -1474,16 +1482,16 @@ public), e.g. `discord:<id>=michael,discord:<id>=mer,telegram:<id>=michael`.
 The model can't change it, so:
 - **Email drafts only ever go in the asker's own Gmail.** There's no
   owner parameter at all.
-- **Chores and calendar proposals default to the asker**, instead of
+- **To-dos and calendar proposals default to the asker**, instead of
   the app's old default of Michael. Naming the other person still works.
 - **If the sender is unknown** (a cron run, the CLI, an account not in
   `BENNY_PEOPLE`, or a Hermes update that moves the session module),
   anything tied to one person is refused rather than guessed.
 
 **Tools** (all in the `benny` toolset): `benny_today` (the brief, or the
-digest as data), `benny_upcoming`, `benny_chores`, `benny_add_chore`,
-`benny_set_chore_done`, `benny_list`, `benny_add_to_list`,
-`benny_check_off`, `benny_search_email`, `benny_read_email`,
+digest as data), `benny_upcoming`, `benny_todos`, `benny_add_todo`,
+`benny_add_to_list`, `benny_set_todo_done` (these four replaced the five
+chore and list tools in Oct 2026, see "To-Do"), `benny_search_email`, `benny_read_email`,
 `benny_read_attachment` (see below), `benny_home`, `benny_home_control`
 (see "Smart home through Home Assistant" below),
 `benny_propose_event`, `benny_propose_email_draft`,
@@ -1655,6 +1663,105 @@ The app's `/smarthome.html` and the `powerview-bridge/` push (Stage 8c)
 are superseded for shades. The app can't reach Home Assistant from
 Vercel without a tunnel, and nothing here needs it to.
 
+## To-Do: chores and lists in one place (Oct 2026)
+
+Chores (Stage 3) and shared lists (Stage 19) were two features with two
+pages and two sets of Benny tools. They're now one: `/todo.html`, laid
+out like Microsoft To Do, in the Harbor Lights theme. Every to-do sits in
+a list. Chores and Groceries are lists, and you can make more.
+
+**What's on the page:**
+- **Smart views** in the sidebar: **My Day**, **Important**,
+  **Planned**, **Michael** and **Mer**. Below them, every list with its
+  emoji and open count, then **+ New list**, then the Netherlands move as
+  a link to the tracker.
+- **My Day** shows today's calendar events (from the digest, can't be
+  ticked off), then anything due today or added to My Day today, then an
+  **"Overdue, not in My Day"** group with a ☀️ Add button. Adding is
+  manual, the way Microsoft To Do works. My Day is stored as a date
+  (`my_day`), so it empties itself overnight with no job to clear it.
+- **Planned, Michael and Mer** group things into Overdue, Today, Next 7
+  days, Next 30 days, Later (folded) and No date. Their sidebar counts
+  only include overdue, undated and the next 30 days. Otherwise every
+  dated move task through Sept 2027 would count.
+- **Move tasks** with an exact date show in Important, Planned and the
+  person views with a gold "Move · F-03" tag. They're read from the
+  tracker, never copied. Ticking one off marks it done there (repeats roll
+  forward, as on the Move page). The star on a move task is the tracker's
+  **this week's focus**, still three at most, and that cap is now checked
+  by the server (`PATCH /api/tasks/:id` answers 409), so both pages share
+  it.
+- **Each to-do** can have steps, a due date, a repeat (daily, weekly,
+  monthly), a person (Michael, Mer or anyone), notes, a star, and My Day.
+  Ticking off a repeating to-do moves it to its next due date instead,
+  with its steps unticked.
+- **The add box depends on the list.** A "tasks" list (Chores, and new
+  lists by default) has Claude read who and when out of the sentence. An
+  "items" list (Groceries) takes items as typed, one per comma, skipping
+  anything already on it, as Stage 19 did. Each list's ⋯ menu switches
+  this, renames it, changes its emoji or deletes it (not Chores). Adding
+  from a smart view lands in Chores, with that view's defaults: My Day,
+  starred, due today, or for that person.
+- **Who it's for.** A named person wins. Otherwise it's the person whose
+  view you're in, else the **Typing as** setting at the bottom of the
+  sidebar. That's the same per-device choice the Move page's
+  Everyone/Michael/Mer filter remembers. Nothing set means nobody. This
+  replaced the old parser default, where anything without a name went to
+  Michael.
+- **On a phone** it's three screens like To Do's app: Lists → a list → a
+  to-do.
+
+The homepage's Chores and Lists tiles became one To-Do tile. The Today
+card, the Timeline and the morning brief show due to-dos from every list.
+The brief's heading is now "✅ To-dos", and it names the list when it
+isn't Chores. `/chores.html` and `/lists.html` redirect to the right list.
+
+**Routes** (`server/routes/todos.js`):
+
+| Route | Agent? |
+|---|---|
+| `GET /api/todos`: lists, open to-dos, to-dos finished in the last 30 days, open move tasks with a date | ✅ |
+| `POST /api/todos`: `{ text, list?, assignee_hint?, defaults? }`, parsed by Claude, "tasks" lists only | ✅ |
+| `PATCH /api/todos/:id`: title, done, important, my_day, due_date, repeat, assignee, list, notes, steps | ✅ |
+| `DELETE /api/todos/:id` | ❌ app only |
+| `GET /api/lists`, `GET /api/lists/:slug/items`, `POST /api/lists/:slug/items` (Stage 19's shapes) | ✅ |
+| `POST /api/lists`, `PATCH /api/lists/:slug`, `DELETE /api/lists/:slug` | ❌ app only |
+| `DELETE /api/lists/:slug/items/checked`: "Clear completed" | ❌ app only |
+| `GET/POST /api/chores`, `PATCH /api/chores/:id`, `PATCH /api/list-items/:id`: the old shapes, answered from `todos` | ✅ until the cleanup |
+
+The old chore and list-item routes are only there so the plugin on the Pi
+keeps working until it's reinstalled. They go, along with the `chores`
+and `list_items` tables, in a cleanup once To-Do has been in use for a
+few days.
+
+**Benny's tools:** `benny_todos` (filter by list, person, my_day /
+important / planned, open / done; also lists the lists),
+`benny_add_todo` (parsed, default Chores; the asker or the named person
+goes along as the hint), `benny_add_to_list` (unchanged) and
+`benny_set_todo_done` (says when a repeating one is next due) replaced
+`benny_chores`, `benny_add_chore`, `benny_set_chore_done`, `benny_list`
+and `benny_check_off`.
+
+**Schema change** (`scripts/todo_merge.sql`, applied as the `todo_merge`
+migration). It's additive: `lists` gets `emoji`, `mode` (`tasks` or
+`items`) and `position`, plus a `chores` row. A new `todos` table holds
+every to-do, with RLS on and no policies, so it's server-only like the
+rest. Existing chores and list items were copied in with their ids, so
+ids Benny already had still work. `chores` and `list_items` are left in
+place until the cleanup.
+
+**Deploying it** (the order matters, because production is the only
+database):
+1. Apply the `todo_merge` migration. The deployed app keeps using the
+   old tables, so nothing changes yet.
+2. Right before pushing, run the copy section of `scripts/todo_merge.sql`
+   again, so anything added through the old app in the meantime comes
+   along. Never run it after the deploy: by then the old tables are
+   stale.
+3. Push. Vercel deploys.
+4. Reinstall the plugin on the Pi (see "Benny plugin for Hermes" above)
+   and restart Hermes.
+
 ## Deploying to Vercel
 
 Benny is deployed at **https://benny-penguin-palace.vercel.app** — Vercel is
@@ -1740,8 +1847,8 @@ GitHub repo.
 
 1. ✅ Hello world — full stack wired together
 2. ✅ Shared calendar that auto-populates from email (Google Calendar connected for both Michael and Mer, merged into one read-only list)
-3. ✅ Natural-language chore list — confirmed working live
-4. ✅ Mutual to-do assignment — covered by the chores feature (every chore has an assignee already)
+3. ✅ Natural-language chore list — confirmed working live. Now the Chores list in To-Do (Oct 2026)
+4. ✅ Mutual to-do assignment — covered by the chores feature, and since Oct 2026 by To-Do (chores and shared lists in one place, see above)
 5. ✅ Home energy/bills analyzer
 6. ✅ Deployed live to Vercel
 7. ✅ Home sale comps tracker — confirmed working live (RentCast free tier)

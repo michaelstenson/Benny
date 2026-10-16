@@ -5,6 +5,7 @@ import { fetchEventsForOwner } from './calendar.js';
 import { withNextDue } from '../lib/recurringBills.js';
 import { fetchTodaysWeather } from '../lib/weatherClient.js';
 import { formatMorningBrief } from '../lib/morningBrief.js';
+import { fetchDueTodos } from './todos.js';
 
 export const digestRouter = Router();
 
@@ -26,10 +27,10 @@ function localDateString(date) {
 }
 
 // GET /api/digest — merges today's calendar events (both owners) with
-// today's due-or-overdue open chores into one at-a-glance view. Since
+// today's due-or-overdue open to-dos into one at-a-glance view. Since
 // Stage 20 it also carries today's weather and recurring bills due in
 // the next week, since it's what agent Benny's morning brief is built from. Pure
-// data-joining, no Claude involved — unlike chores/bills/advice, there's
+// data-joining, no Claude involved — unlike to-dos/bills/advice, there's
 // nothing here for a language model to extract or generate.
 digestRouter.get('/digest', async (req, res) => {
   try {
@@ -57,7 +58,7 @@ async function buildDigest() {
   const today = localDateString(new Date());
 
   // A broken/expired Google connection shouldn't take down the whole
-  // digest — chores are unrelated to Google and should still show up.
+  // digest — to-dos are unrelated to Google and should still show up.
   // fetchEventsForOwner already treats "not connected" as "no events";
   // this treats "connected but the token call failed" the same way,
   // just logging it instead of surfacing an error for something that's
@@ -84,24 +85,15 @@ async function buildDigest() {
     .filter((event) => isOnDay(event, today))
     .sort((a, b) => new Date(a.start) - new Date(b.start));
 
-  // due_date <= today, so this also naturally picks up anything
-  // overdue — chores with no due_date are excluded (NULL <= anything
-  // is never true in Postgres), which is what we want: an open-ended
-  // chore isn't "due" today just because it exists.
-  const { data: chores, error } = await supabaseAdmin
-    .from('chores')
-    .select('*')
-    .eq('completed', false)
-    .lte('due_date', today)
-    .order('due_date', { ascending: true });
-  if (error) throw error;
-
-  const choresWithFlag = (chores || []).map((chore) => ({
-    ...chore,
-    overdue: chore.due_date < today,
+  // Open to-dos on any list due today or earlier, so anything overdue
+  // too. Undated ones are left out: an open-ended to-do isn't "due"
+  // today just because it exists.
+  const todos = (await fetchDueTodos(today)).map((todo) => ({
+    ...todo,
+    overdue: todo.due_date < today,
   }));
 
-  return { date: today, weather, events, chores: choresWithFlag, bills_due: billsDue };
+  return { date: today, weather, events, todos, bills_due: billsDue };
 }
 
 // An all-day event's start/end are plain dates (end exclusive, the way

@@ -23,11 +23,17 @@ const AGENT_ROUTES = [
   // no model.
   { method: 'GET', path: /^\/digest\/brief$/ },
   { method: 'GET', path: /^\/timeline$/ },
+  // To-Do (Oct 2026). Deleting to-dos, clearing finished items and
+  // creating, renaming or deleting lists stay app-only: they can't be
+  // undone, and Benny never needs them.
+  { method: 'GET', path: /^\/todos$/ },
+  { method: 'POST', path: /^\/todos$/ },
+  { method: 'PATCH', path: /^\/todos\/[0-9a-f-]{36}$/ },
+  // The pre-To-Do chore routes, until the plugin on the Pi is reinstalled.
   { method: 'GET', path: /^\/chores$/ },
   { method: 'POST', path: /^\/chores$/ },
   { method: 'PATCH', path: /^\/chores\/[0-9a-f-]{36}$/ },
-  // Shared lists (Stage 19). Clearing checked items is left off on
-  // purpose — it's the one irreversible list action, so it stays app-only.
+  // Shared lists (Stage 19), now "items" lists in To-Do.
   { method: 'GET', path: /^\/lists$/ },
   { method: 'GET', path: /^\/lists\/[a-z0-9-]+\/items$/ },
   { method: 'POST', path: /^\/lists\/[a-z0-9-]+\/items$/ },

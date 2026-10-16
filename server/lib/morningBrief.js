@@ -14,9 +14,9 @@ const NAMES = { michael: 'Michael', mer: 'Mer' };
 // A long overdue list would bury everything else (and Discord caps a
 // message at 2,000 characters), so the brief shows this many and points
 // to the app for the rest.
-const MAX_CHORES = 8;
+const MAX_TODOS = 8;
 
-export function formatMorningBrief({ date, weather, events = [], chores = [], bills_due: bills = [] }) {
+export function formatMorningBrief({ date, weather, events = [], todos = [], bills_due: bills = [] }) {
   const lines = [`🐧 **Good morning, Penguin Palace!** ${longDate(date)}`];
 
   const urgent = bills.filter((bill) => !bill.autopay && bill.days_until <= 1);
@@ -34,15 +34,20 @@ export function formatMorningBrief({ date, weather, events = [], chores = [], bi
     }
   }
 
-  if (chores.length) {
-    const overdueFirst = [...chores.filter((c) => c.overdue), ...chores.filter((c) => !c.overdue)];
-    lines.push('', '🧹 **Chores**');
-    for (const chore of overdueFirst.slice(0, MAX_CHORES)) {
-      const late = chore.overdue ? `, overdue since ${shortDate(chore.due_date)}` : '';
-      lines.push(`• ${clean(chore.title)} (${name(chore.assignee)}${late})`);
+  if (todos.length) {
+    const overdueFirst = [...todos.filter((t) => t.overdue), ...todos.filter((t) => !t.overdue)];
+    lines.push('', '✅ **To-dos**');
+    for (const todo of overdueFirst.slice(0, MAX_TODOS)) {
+      // Chores is the usual list, so only another list's name is worth saying.
+      const details = [
+        todo.list && todo.list !== 'chores' ? clean(todo.list_name || todo.list) : null,
+        todo.assignee ? name(todo.assignee) : null,
+        todo.overdue ? `overdue since ${shortDate(todo.due_date)}` : null,
+      ].filter(Boolean);
+      lines.push(`• ${clean(todo.title)}${details.length ? ` (${details.join(', ')})` : ''}`);
     }
-    if (overdueFirst.length > MAX_CHORES) {
-      lines.push(`• …and ${overdueFirst.length - MAX_CHORES} more in Benny`);
+    if (overdueFirst.length > MAX_TODOS) {
+      lines.push(`• …and ${overdueFirst.length - MAX_TODOS} more in Benny`);
     }
   }
 
@@ -54,8 +59,8 @@ export function formatMorningBrief({ date, weather, events = [], chores = [], bi
     }
   }
 
-  if (!events.length && !chores.length && !bills.length) {
-    lines.push('', 'Nothing on either calendar, no chores due and no bills this week. Enjoy the quiet.');
+  if (!events.length && !todos.length && !bills.length) {
+    lines.push('', 'Nothing on either calendar, no to-dos due and no bills this week. Enjoy the quiet.');
   }
 
   return lines.join('\n');
@@ -115,7 +120,7 @@ function shortDate(day) {
   return longDate(day, { month: 'short', day: 'numeric' });
 }
 
-// Chore titles and calendar events can contain anything: an invite from
+// To-do titles and calendar events can contain anything: an invite from
 // a stranger lands on the calendar on its own. Before they're posted to
 // Discord, this keeps them on one line, makes Markdown and masked links
 // show as plain text, and breaks @everyone / <@id> mentions so a title

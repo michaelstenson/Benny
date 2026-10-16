@@ -7,6 +7,7 @@ come back in the tool's result, which only costs tokens when it's used.
 
 PERSON = {"type": "string", "enum": ["michael", "mer"]}
 LIST = {"type": "string", "description": "List short name. Default groceries."}
+TODO_LIST = {"type": "string", "description": "List short name, e.g. chores, groceries. Default: every list."}
 
 
 def tool(name, description, properties=None, required=None):
@@ -19,7 +20,7 @@ def tool(name, description, properties=None, required=None):
 
 TODAY = tool(
     "benny_today",
-    "Today in Chicago from the Benny app: weather, both calendars, chores due or overdue, bills due "
+    "Today in Chicago from the Benny app: weather, both calendars, to-dos due or overdue, bills due "
     "this week. format=brief (default) is the finished rundown to pass on as-is; format=data is JSON "
     "for a specific question, and includes today's date.",
     {"format": {"type": "string", "enum": ["brief", "data"]}},
@@ -27,55 +28,49 @@ TODAY = tool(
 
 UPCOMING = tool(
     "benny_upcoming",
-    "Coming up: timed calendar events for both people, open chores and Netherlands-move tasks due "
+    "Coming up: timed calendar events for both people, open to-dos and Netherlands-move tasks due "
     "within the next N days (overdue included).",
     {"days": {"type": "integer", "minimum": 1, "maximum": 60, "description": "Default 14."}},
 )
 
-CHORES = tool(
-    "benny_chores",
-    "List chores with their ids. Default open ones, soonest due first.",
-    {"status": {"type": "string", "enum": ["open", "done", "all"]}},
+TODOS = tool(
+    "benny_todos",
+    "To-dos from the app's To-Do lists (Chores, Groceries and any others), with ids. Default open ones "
+    "on every list, soonest due first. Also lists the lists. Move tasks are in benny_upcoming.",
+    {
+        "list": TODO_LIST,
+        "person": PERSON,
+        "view": {"type": "string", "enum": ["my_day", "important", "planned"]},
+        "status": {"type": "string", "enum": ["open", "done", "all"]},
+    },
 )
 
-ADD_CHORE = tool(
-    "benny_add_chore",
-    "Add a chore. The app works out the title and due date from task. assignee defaults to whoever "
-    "is asking.",
+ADD_TODO = tool(
+    "benny_add_todo",
+    "Add a to-do (default list chores). The app works out the title and due date from task. assignee "
+    "defaults to whoever is asking. For groceries and other item lists use benny_add_to_list.",
     {
         "task": {"type": "string", "description": "What and when, e.g. 'call the vet about Quincy on Friday'."},
         "assignee": PERSON,
+        "list": {"type": "string", "description": "List short name. Default chores."},
     },
     ["task"],
 )
 
-SET_CHORE_DONE = tool(
-    "benny_set_chore_done",
-    "Mark a chore done (or not done). Get the id from benny_chores; if more than one could match, ask.",
-    {"chore_id": {"type": "string"}, "done": {"type": "boolean", "description": "Default true."}},
-    ["chore_id"],
-)
-
-LIST_ITEMS = tool(
-    "benny_list",
-    "Items on a shared list (groceries by default), with ids. Open items only unless include_checked.",
-    {"list": LIST, "include_checked": {"type": "boolean"}},
-)
-
 ADD_TO_LIST = tool(
     "benny_add_to_list",
-    "Add items to a shared list. One entry per item, as the person said it (quantity only if given). "
-    "Items already on the list are skipped.",
+    "Add items to a shared list like groceries. One entry per item, as the person said it (quantity "
+    "only if given). Items already on the list are skipped.",
     {"items": {"type": "array", "items": {"type": "string"}}, "list": LIST},
     ["items"],
 )
 
-CHECK_OFF = tool(
-    "benny_check_off",
-    "Check a list item off (bought) or back on. Get the id from benny_list. For 'got everything', list "
-    "the items back first.",
-    {"item_id": {"type": "string"}, "checked": {"type": "boolean", "description": "Default true."}},
-    ["item_id"],
+SET_TODO_DONE = tool(
+    "benny_set_todo_done",
+    "Tick a to-do or list item off (done, bought) or back on. Get the id from benny_todos; if more than "
+    "one could match, ask. For 'got everything', list the items back first.",
+    {"todo_id": {"type": "string"}, "done": {"type": "boolean", "description": "Default true."}},
+    ["todo_id"],
 )
 
 PROPOSE_EVENT = tool(

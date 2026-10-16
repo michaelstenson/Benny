@@ -3,16 +3,22 @@
 // use" feature (also called function calling): instead of asking Claude
 // to write JSON in a text reply and hoping it's well-formed, we give it a
 // strict schema and it fills in the fields, guaranteed to match.
+//
+// Was choreParser.js until To-Do (Oct 2026). A to-do can now belong to
+// nobody, so the person is only filled in when the sentence names one;
+// otherwise it falls back to whoever is typing, when the page knows.
 
 import { anthropic, FAST_EXTRACTION_MODEL } from './anthropicClient.js';
 import { HOUSEHOLD_TIMEZONE, householdToday } from './recurringBills.js';
 
+const NAMES = { michael: 'Michael', mer: 'Mer' };
+
 // This is the schema Claude has to fill in. Giving it exactly two allowed
 // assignee values (rather than accepting free text) is what makes this
 // reliable enough to store directly in the database.
-const EXTRACT_CHORE_TOOL = {
-  name: 'extract_chore',
-  description: 'Extract a structured household chore/task from a natural-language sentence.',
+const EXTRACT_TODO_TOOL = {
+  name: 'extract_todo',
+  description: 'Extract a structured household to-do from a natural-language sentence.',
   input_schema: {
     type: 'object',
     properties: {
@@ -24,8 +30,8 @@ const EXTRACT_CHORE_TOOL = {
         type: 'string',
         enum: ['michael', 'mer'],
         description:
-          "Who the task is for. If the sentence doesn't name a person, assume 'michael' " +
-          '(the person typing it in).',
+          'Who the task is for, only if the sentence names or clearly points to a person. ' +
+          'Omit this field when nobody is mentioned.',
       },
       due_date: {
         type: 'string',
@@ -35,15 +41,20 @@ const EXTRACT_CHORE_TOOL = {
           'entirely if no date or day is mentioned.',
       },
     },
-    required: ['title', 'assignee'],
+    required: ['title'],
   },
 };
 
-export async function parseChoreText(text) {
+// assigneeHint: who is typing (or whose view they're adding from), used
+// when the sentence doesn't name anyone, and for "me".
+export async function parseTodoText(text, { assigneeHint = null } = {}) {
   // Today in Chicago, not on the server's UTC clock: after 7pm Central,
   // UTC is already tomorrow, and "tomorrow" used to land a day late.
   const isoToday = householdToday();
   const weekday = new Date().toLocaleDateString('en-US', { weekday: 'long', timeZone: HOUSEHOLD_TIMEZONE });
+  const typer = NAMES[assigneeHint]
+    ? ` The person typing is ${NAMES[assigneeHint]}, so "me" or "I" means "${assigneeHint}".`
+    : '';
 
   const response = await anthropic.messages.create({
     model: FAST_EXTRACTION_MODEL,
@@ -53,20 +64,20 @@ export async function parseChoreText(text) {
       '("Thursday", "tomorrow", "next week") into real ISO dates. "Next week" with no ' +
       'day named means 7 days from today. The only two ' +
       'people in this household are "michael" and "mer" — map any name, nickname, ' +
-      'or pronoun to one of those two.',
-    tools: [EXTRACT_CHORE_TOOL],
-    tool_choice: { type: 'tool', name: 'extract_chore' }, // forces Claude to use the tool, not reply in plain text
+      'or pronoun to one of those two.' + typer,
+    tools: [EXTRACT_TODO_TOOL],
+    tool_choice: { type: 'tool', name: 'extract_todo' }, // forces Claude to use the tool, not reply in plain text
     messages: [{ role: 'user', content: text }],
   });
 
   const toolUse = response.content.find((block) => block.type === 'tool_use');
   if (!toolUse) {
-    throw new Error('Claude did not return a structured chore — try rephrasing.');
+    throw new Error('Claude did not return a structured to-do — try rephrasing.');
   }
 
   return {
     title: toolUse.input.title,
-    assignee: toolUse.input.assignee,
+    assignee: toolUse.input.assignee ?? (NAMES[assigneeHint] ? assigneeHint : null),
     due_date: toolUse.input.due_date ?? null,
   };
 }

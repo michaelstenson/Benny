@@ -489,3 +489,114 @@ input[type='checkbox'] {
 }
 .hl-flash.is-visible { opacity: 1; transform: translate(-50%, 0); }
 .hl-flash.is-error { border-color: var(--hl-up); }
+
+/* To-Do (Oct 2026): Microsoft To Do's layout in Harbor Lights. Desktop is
+   three columns (lists, a list, a task); a phone shows one at a time,
+   switched by data-screen on .hl-todo. */
+.hl-todo-shell { max-width: 1180px; margin: 0 auto; padding: 24px; }
+.hl-todo { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 48px); overflow: hidden; }
+.hl-todo.has-detail { grid-template-columns: 250px minmax(0, 1fr) 340px; }
+
+.hl-todo-nav { border-right: 1px solid var(--hl-border); padding: 20px 12px; display: flex; flex-direction: column; gap: 2px; }
+.hl-todo-brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 16px; }
+.hl-todo-brand .hl-logo { width: 36px; height: 36px; border-radius: 11px; }
+.hl-todo-nav-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 11px; border: none; background: none; color: var(--hl-text-dim); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.hl-todo-nav-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--hl-text); }
+.hl-todo-nav-item.is-active { background: rgba(255, 255, 255, 0.08); color: var(--hl-text); box-shadow: inset 3px 0 0 var(--hl-gold); }
+.hl-todo-icon { width: 22px; text-align: center; font-size: 16px; flex-shrink: 0; }
+.hl-todo-count { margin-left: auto; font-size: 12px; color: var(--hl-label); font-weight: 700; }
+.hl-todo-count.is-late { color: var(--hl-up); }
+.hl-todo-sep { height: 1px; background: var(--hl-border); margin: 10px 8px; }
+.hl-todo-nav .hl-label { padding: 6px 10px 4px; }
+.hl-todo-new { color: var(--hl-gold); }
+.hl-todo-new-form { display: flex; gap: 6px; padding: 4px 6px; }
+.hl-todo-new-form input { flex: 1; min-width: 0; padding: 7px 10px; font-size: 13px; }
+.hl-todo-device { margin-top: auto; padding: 14px 10px 0; font-size: 12px; color: var(--hl-text-faint); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.hl-todo-main { padding: 24px 28px 28px; min-width: 0; }
+.hl-todo-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.hl-todo-head h1 { font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 28px; margin: 0; line-height: 1.1; color: var(--hl-text); }
+.hl-todo-head .hl-todo-emoji { font-size: 26px; }
+.hl-todo-head .hl-todo-icon-btn { margin-left: auto; }
+.hl-todo-sub { font-size: 13px; color: var(--hl-text-faint); margin-bottom: 18px; }
+.hl-todo-back { display: none; }
+
+.hl-todo-settings { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px; align-items: center; margin-bottom: 16px; }
+.hl-todo-settings .hl-input { padding: 8px 10px; font-size: 13px; color-scheme: dark; }
+.hl-todo-settings-actions { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; }
+
+.hl-todo-add { display: flex; gap: 10px; align-items: center; padding: 4px 6px 4px 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--hl-border-strong); margin-bottom: 6px; }
+.hl-todo-add:focus-within { border-color: var(--hl-gold); box-shadow: 0 0 0 3px var(--hl-gold-soft); }
+.hl-todo-add .hl-todo-plus { color: var(--hl-gold); font-size: 20px; line-height: 1; }
+.hl-todo-add input { flex: 1; min-width: 0; background: none; border: none; color: var(--hl-text); font: inherit; font-size: 14px; padding: 10px 0; }
+.hl-todo-add input:focus { outline: none; }
+.hl-todo-add input::placeholder { color: var(--hl-text-faint); }
+.hl-todo-hint { font-size: 12px; color: var(--hl-label); margin: 0 4px 18px; min-height: 16px; }
+
+.hl-todo-group { margin-top: 18px; }
+.hl-todo-group-head { display: flex; align-items: center; gap: 8px; padding: 0 4px 8px; }
+.hl-todo-group-head button { display: flex; align-items: center; gap: 8px; background: none; border: none; padding: 0; cursor: pointer; font: inherit; }
+.hl-todo-group-head .hl-todo-caret { color: var(--hl-label); font-size: 11px; width: 10px; }
+.hl-todo-group-head.is-late .hl-label { color: var(--hl-up); }
+.hl-todo-group-head .hl-link { margin-left: auto; font-size: 12px; }
+
+.hl-todo-rows { display: flex; flex-direction: column; gap: 6px; }
+.hl-todo-row { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hl-border); cursor: pointer; }
+.hl-todo-row:hover { background: rgba(255, 255, 255, 0.065); }
+.hl-todo-row.is-selected { border-color: rgba(242, 200, 121, 0.55); background: rgba(242, 200, 121, 0.07); }
+.hl-todo-row.is-event { cursor: default; background: transparent; border-style: dashed; }
+.hl-todo-check { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--who, var(--hl-text-faint)); background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #211f2b; font-size: 12px; font-weight: 700; padding: 0; }
+.hl-todo-check:hover { box-shadow: 0 0 10px var(--who, var(--hl-gold)); }
+.hl-todo-check.is-done { background: var(--hl-gold); border-color: var(--hl-gold); }
+.hl-todo-row-body { flex: 1; min-width: 0; }
+.hl-todo-title { font-size: 14.5px; color: var(--hl-text); line-height: 1.35; overflow-wrap: anywhere; }
+.hl-todo-row.is-done .hl-todo-title { text-decoration: line-through; color: var(--hl-text-faint); }
+.hl-todo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 3px; font-size: 12px; color: var(--hl-text-faint); }
+.hl-todo-meta .is-late { color: var(--hl-up); font-weight: 700; }
+.hl-todo-meta .is-today { color: var(--hl-gold); font-weight: 700; }
+.hl-todo-who { display: inline-flex; align-items: center; gap: 5px; }
+.hl-todo-tag { border-radius: 6px; padding: 1px 7px; font-size: 11px; font-weight: 700; background: rgba(253, 230, 138, 0.12); color: #fde68a; }
+.hl-todo-time { width: 52px; flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--hl-text-dim); text-align: center; }
+.hl-todo-sun { flex-shrink: 0; border: none; background: none; color: var(--hl-label); cursor: pointer; font: inherit; font-size: 13px; padding: 4px 6px; border-radius: 8px; }
+.hl-todo-sun:hover { color: var(--hl-gold); background: rgba(255, 255, 255, 0.06); }
+.hl-todo .hl-star { background: none; border: none; font-family: inherit; }
+.hl-todo-empty { padding: 28px 12px; text-align: center; color: var(--hl-text-faint); font-size: 14px; }
+
+.hl-todo-detail { border-left: 1px solid var(--hl-border); padding: 20px; background: rgba(0, 0, 0, 0.12); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.hl-todo-detail-top { display: flex; align-items: flex-start; gap: 10px; }
+.hl-todo-detail-title { flex: 1; min-width: 0; background: none; border: none; color: var(--hl-text); font: inherit; font-family: 'Baloo 2', sans-serif; font-size: 19px; font-weight: 600; line-height: 1.3; resize: none; padding: 0; }
+.hl-todo-detail-title:focus { outline: none; }
+.hl-todo-box { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hl-border); border-radius: 14px; overflow: hidden; }
+.hl-todo-line { display: flex; align-items: center; gap: 10px; padding: 10px 12px; font-size: 14px; color: var(--hl-text-dim); width: 100%; box-sizing: border-box; background: none; border: none; text-align: left; font-family: inherit; }
+.hl-todo-box > * + * { border-top: 1px solid var(--hl-border); }
+button.hl-todo-line { cursor: pointer; }
+button.hl-todo-line:hover { color: var(--hl-text); background: rgba(255, 255, 255, 0.03); }
+.hl-todo-line.is-on, .hl-todo-line.is-on .hl-todo-icon { color: var(--hl-gold); }
+.hl-todo-line .hl-todo-icon { color: var(--hl-label); }
+.hl-todo-line input[type='date'], .hl-todo-line select { margin-left: auto; min-width: 0; max-width: 60%; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--hl-border-strong); border-radius: 9px; color: var(--hl-text); font: inherit; font-size: 13px; padding: 4px 8px; color-scheme: dark; }
+.hl-todo-line input.hl-todo-step-input { flex: 1; background: none; border: none; color: var(--hl-text); font: inherit; font-size: 13.5px; padding: 4px 0; outline: none; }
+.hl-todo-step { display: flex; align-items: center; gap: 10px; padding: 9px 12px; font-size: 13.5px; color: var(--hl-text-dim); }
+.hl-todo-step .hl-todo-check { width: 18px; height: 18px; font-size: 10px; }
+.hl-todo-step span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.hl-todo-step.is-done span { text-decoration: line-through; color: var(--hl-text-faint); }
+.hl-todo-seg { margin-left: auto; display: inline-flex; padding: 2px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--hl-border); }
+.hl-todo-seg button { border: none; background: none; color: var(--hl-text-faint); font: inherit; font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 8px; cursor: pointer; }
+.hl-todo-seg button.is-on { background: var(--seg, var(--hl-gold)); color: #211f2b; }
+.hl-todo-notes { width: 100%; min-height: 84px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--hl-border); border-radius: 14px; color: var(--hl-text); font: inherit; font-size: 13.5px; padding: 10px 12px; resize: vertical; box-sizing: border-box; }
+.hl-todo-notes:focus { outline: none; border-color: var(--hl-gold); }
+.hl-todo-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid var(--hl-border); font-size: 12px; color: var(--hl-text-faint); }
+.hl-todo-icon-btn { border: none; background: none; color: var(--hl-text-faint); cursor: pointer; font-size: 15px; padding: 4px 6px; border-radius: 8px; }
+.hl-todo-icon-btn:hover { color: var(--hl-text); background: rgba(255, 255, 255, 0.06); }
+.hl-todo-note { font-size: 13px; color: var(--hl-text-faint); line-height: 1.5; margin: 0; }
+
+@media (max-width: 760px) {
+  .hl-todo-shell { padding: 0; }
+  .hl-todo, .hl-todo.has-detail { display: block; min-height: 100vh; border-radius: 0; border-left: none; border-right: none; }
+  .hl-todo-nav, .hl-todo-main, .hl-todo-detail { display: none; border: none; }
+  .hl-todo[data-screen='nav'] .hl-todo-nav { display: flex; padding: 16px; min-height: 100vh; box-sizing: border-box; }
+  .hl-todo[data-screen='list'] .hl-todo-main { display: block; padding: 16px; }
+  .hl-todo[data-screen='detail'] .hl-todo-detail { display: flex; min-height: 100vh; padding: 16px; background: transparent; box-sizing: border-box; }
+  .hl-todo-back { display: inline-block; align-self: flex-start; margin-bottom: 12px; border: none; background: none; color: var(--hl-gold); font: inherit; font-size: 15px; font-weight: 700; padding: 0; cursor: pointer; }
+  .hl-todo-head h1 { font-size: 26px; }
+  .hl-todo-nav-item { padding: 12px 10px; font-size: 15px; }
+}

@@ -26,14 +26,14 @@ async function checkIn() {
 
 checkIn();
 
-// --- Today digest: merges calendar events + due/overdue chores ---
+// --- Today digest: merges calendar events + due/overdue to-dos ---
 
 const digestLoadingEl = document.getElementById('digest-loading');
 const digestListEl = document.getElementById('digest-list');
 const digestEmptyEl = document.getElementById('digest-empty');
 const digestWeatherEl = document.getElementById('digest-weather');
 
-// Same family colors used everywhere else (calendar dots, chore chips) —
+// Same family colors used everywhere else (calendar dots, to-do checks) —
 // an owner/assignee here should mean the same thing it does on those pages.
 const PERSON_META = {
   michael: { label: 'Michael', color: '#34D399' },
@@ -46,12 +46,13 @@ function personDot(personId) {
   return `<span class="hl-dot flex-shrink-0" style="background:${meta.color};box-shadow:0 0 6px ${meta.color};" title="${meta.label}"></span>`;
 }
 
-function choreDigestRow(chore) {
+function todoDigestRow(todo) {
+  const listName = todo.list !== 'chores' ? ` <span class="text-xs hl-muted">· ${escapeHtml(todo.list_name)}</span>` : '';
   return `
     <li class="py-2 flex items-start gap-2">
-      ${personDot(chore.assignee)}
-      <p class="${chore.overdue ? 'hl-up' : 'hl-dim'}">
-        ${escapeHtml(chore.title)}${chore.overdue ? ' <span class="text-xs">(overdue)</span>' : ''}
+      ${personDot(todo.assignee)}
+      <p class="${todo.overdue ? 'hl-up' : 'hl-dim'}">
+        ${escapeHtml(todo.title)}${todo.overdue ? ' <span class="text-xs">(overdue)</span>' : ''}${listName}
       </p>
     </li>
   `;
@@ -111,7 +112,7 @@ async function loadDigest() {
     }
 
     const rows = [
-      ...data.chores.map(choreDigestRow),
+      ...data.todos.map(todoDigestRow),
       ...data.events.map(eventDigestRow),
       ...(data.bills_due || []).map(billDigestRow),
     ];

@@ -28,25 +28,25 @@ viewToggleButtons.forEach((btn) => {
   });
 });
 
-// --- Timeline view: chores due + timed events, merged chronologically ---
+// --- Timeline view: to-dos due + timed events, merged chronologically ---
 
 const timelineLoadingEl = document.getElementById('timeline-loading');
 const timelineListEl = document.getElementById('timeline-list');
 const timelineEmptyEl = document.getElementById('timeline-empty');
 
-function choreRow(chore) {
-  const label = chore.overdue ? 'Overdue' : 'Due';
-  const dueLabel = new Date(`${chore.due_date}T00:00:00`).toLocaleDateString(undefined, {
+function todoRow(todo) {
+  const label = todo.overdue ? 'Overdue' : 'Due';
+  const dueLabel = new Date(`${todo.due_date}T00:00:00`).toLocaleDateString(undefined, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
   });
   return `
     <li class="py-3 flex items-start gap-3">
-      ${personDot(chore.assignee)}
+      ${personDot(todo.assignee)}
       <div class="flex-1">
-        <p class="${chore.overdue ? 'hl-up' : 'hl-dim'}">${escapeHtml(chore.title)}</p>
-        <p class="text-xs hl-muted mt-0.5">${label} ${dueLabel} · Chore</p>
+        <p class="${todo.overdue ? 'hl-up' : 'hl-dim'}">${escapeHtml(todo.title)}</p>
+        <p class="text-xs hl-muted mt-0.5">${label} ${dueLabel} · <a href="/todo.html" class="underline">${escapeHtml(todo.list_name)}</a></p>
       </div>
     </li>
   `;
@@ -103,11 +103,11 @@ async function loadTimeline() {
       return;
     }
 
-    // Chores sort by start of their due date; timed events already carry
+    // To-dos sort by start of their due date; timed events already carry
     // a full timestamp — merging on a common sort key interleaves them
-    // naturally (a chore due today sits above today's later meetings).
+    // naturally (a to-do due today sits above today's later meetings).
     const items = [
-      ...data.chores.map((c) => ({ kind: 'chore', sortKey: `${c.due_date}T00:00:00`, data: c })),
+      ...data.todos.map((t) => ({ kind: 'todo', sortKey: `${t.due_date}T00:00:00`, data: t })),
       ...data.events.map((e) => ({ kind: 'event', sortKey: e.start, data: e })),
       ...(data.move_tasks || []).map((t) => ({ kind: 'move', sortKey: `${t.due_date}T00:00:00`, data: t })),
     ].sort((a, b) => new Date(a.sortKey) - new Date(b.sortKey));
@@ -120,7 +120,7 @@ async function loadTimeline() {
     timelineListEl.classList.remove('hidden');
     timelineListEl.innerHTML = items
       .map((item) => {
-        if (item.kind === 'chore') return choreRow(item.data);
+        if (item.kind === 'todo') return todoRow(item.data);
         if (item.kind === 'move') return moveTaskRow(item.data);
         return eventRow(item.data);
       })

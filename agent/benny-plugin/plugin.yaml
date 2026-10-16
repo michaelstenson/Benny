@@ -2,8 +2,8 @@ name: benny
 version: 1.0.0
 description: >
   Benny the agent's tools for Benny the app (the Penguin Palace household
-  app): today's digest and brief, the upcoming timeline, chores, shared
-  lists, searching and reading the asker's own Gmail, calendar/email
+  app): today's digest and brief, the upcoming timeline, to-dos and
+  shared lists, searching and reading the asker's own Gmail, calendar/email
   proposals that wait for approval in the app, and the smart home through
   Home Assistant on the Pi.
   Replaces calling the app with curl through the terminal.
@@ -11,12 +11,10 @@ author: Michael Stenson
 provides_tools:
   - benny_today
   - benny_upcoming
-  - benny_chores
-  - benny_add_chore
-  - benny_set_chore_done
-  - benny_list
+  - benny_todos
+  - benny_add_todo
   - benny_add_to_list
-  - benny_check_off
+  - benny_set_todo_done
   - benny_search_email
   - benny_read_email
   - benny_read_attachment

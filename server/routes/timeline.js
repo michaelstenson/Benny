@@ -1,4 +1,4 @@
-// The linear "what's next" view: open chores and move tasks with an
+// The linear "what's next" view: open to-dos and move tasks with an
 // exact due date (Stage 22) (including anything overdue, with no lower
 // bound — an unresolved one stays relevant no matter how late) merged
 // chronologically with TIMED calendar events only — never all-day (see /api/calendar/month for those). Distinct
@@ -9,6 +9,7 @@ import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabaseClient.js';
 import { OWNERS } from '../lib/tokenStore.js';
 import { fetchEventsInRange } from './calendar.js';
+import { fetchDueTodos } from './todos.js';
 
 export const timelineRouter = Router();
 
@@ -26,7 +27,7 @@ timelineRouter.get('/timeline', async (req, res) => {
     const timeMax = new Date(now.getTime() + FORWARD_WINDOW_DAYS * 86_400_000).toISOString();
 
     // Same graceful-degradation approach as digest.js: a broken Google
-    // connection shouldn't hide the chores half of this view.
+    // connection shouldn't hide the to-dos half of this view.
     const perOwnerEvents = await Promise.all(
       OWNERS.map(async (owner) => {
         try {
@@ -45,24 +46,14 @@ timelineRouter.get('/timeline', async (req, res) => {
     const today = localDateString(now);
     const cutoff = localDateString(new Date(now.getTime() + FORWARD_WINDOW_DAYS * 86_400_000));
 
-    // due_date <= cutoff naturally excludes chores with no due_date at
-    // all (NULL <= anything is never true in Postgres) and includes
-    // anything overdue regardless of how far in the past, same logic
-    // digest.js already relies on.
-    const { data: chores, error } = await supabaseAdmin
-      .from('chores')
-      .select('*')
-      .eq('completed', false)
-      .lte('due_date', cutoff)
-      .order('due_date', { ascending: true });
-    if (error) throw error;
-
-    const choresWithFlag = (chores || []).map((chore) => ({
-      ...chore,
-      overdue: chore.due_date < today,
+    // Open to-dos on any list due by the cutoff, overdue ones included no
+    // matter how far back; undated ones never show, same as digest.js.
+    const todos = (await fetchDueTodos(cutoff)).map((todo) => ({
+      ...todo,
+      overdue: todo.due_date < today,
     }));
 
-    // Open move tasks (Stage 22), same rule as chores: due on or before the
+    // Open move tasks (Stage 22), same rule as to-dos: due on or before the
     // cutoff, overdue ones included. Only tasks with an exact due date:
     // a month-level task's due date is just the end of its month, which
     // would read as a real deadline on a day-by-day view.
@@ -88,7 +79,7 @@ timelineRouter.get('/timeline', async (req, res) => {
       overdue: t.due_date < today,
     }));
 
-    res.json({ events, chores: choresWithFlag, move_tasks: moveTasks });
+    res.json({ events, todos, move_tasks: moveTasks });
   } catch (err) {
     console.error('[timeline] failed to build timeline:', err.message);
     res.status(500).json({ error: 'Could not load the timeline.' });

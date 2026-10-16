@@ -15,6 +15,7 @@ export const STATUSES = ['todo', 'doing', 'waiting', 'done', 'dropped'];
 export const OPEN_STATUSES = ['todo', 'doing', 'waiting'];
 export const REPEATS = ['weekly', 'monthly', 'quarterly'];
 export const PRECISIONS = ['day', 'month'];
+export const MAX_FOCUS = 3; // this week's focus, picked at the Summit
 
 const NEXT_30_DAYS = 30;
 const DECISIONS_LOOKAHEAD_DAYS = 60; // decisions need lead time, so they surface earlier

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Benny — To-Do</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+  <meta name="theme-color" content="#17151f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Benny" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Nunito:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="/theme.css" />
+  <script src="/auth-guard.js"></script>
+</head>
+<body class="hl-page">
+  <div class="hl-todo-shell">
+    <!-- Filled in by todo.js. On a phone, data-screen picks which of the
+         three columns shows: the lists, one list, or one to-do. -->
+    <div id="app" class="hl-todo hl-card" data-screen="list">
+      <nav id="nav" class="hl-todo-nav"></nav>
+      <main id="main" class="hl-todo-main"><p class="hl-muted">Loading...</p></main>
+      <aside id="detail" class="hl-todo-detail"></aside>
+    </div>
+  </div>
+
+  <script src="/escape.js"></script>
+  <script src="/move-shared.js"></script>
+  <script src="/todo.js"></script>
+</body>
+</html>

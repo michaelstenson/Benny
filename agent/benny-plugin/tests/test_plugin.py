@@ -134,50 +134,101 @@ class PluginTest(unittest.TestCase):
         FakeApp.routes[("GET", "/api/digest")] = (200, {
             "date": "2026-10-10", "weather": None,
             "events": [{"id": "x", "title": "Dentist", "start": "2026-10-10T14:00:00Z", "allDay": False, "owner": "michael", "end": "..."}],
-            "chores": [{"id": CHORE_ID, "title": "Trash", "assignee": "mer", "due_date": "2026-10-09", "overdue": True, "source": "app", "created_by": "x"}],
+            "todos": [{"id": CHORE_ID, "title": "Trash", "list": "chores", "list_name": "Chores", "assignee": "mer", "due_date": "2026-10-09", "overdue": True}],
             "bills_due": [],
         })
         result = self.call(tools.today, {"format": "data"})
         self.assertEqual(result["events"], [{"title": "Dentist", "start": "2026-10-10T14:00:00Z", "owner": "michael"}])
-        self.assertEqual(result["chores"][0], {"id": CHORE_ID, "title": "Trash", "assignee": "mer", "due_date": "2026-10-09", "overdue": True})
+        self.assertEqual(result["todos"][0], {"id": CHORE_ID, "title": "Trash", "list": "chores", "assignee": "mer", "due_date": "2026-10-09", "overdue": True})
 
-    # --- chores -----------------------------------------------------------
+    # --- to-dos -----------------------------------------------------------
 
-    def test_add_chore_defaults_to_whoever_is_asking(self):
-        FakeApp.routes[("POST", "/api/chores")] = (201, {"chore": {"id": CHORE_ID, "title": "Call the vet", "assignee": "mer", "due_date": "2026-10-16"}})
+    TODOS = {
+        "today": "2026-10-16",
+        "lists": [
+            {"slug": "chores", "name": "Chores", "mode": "tasks", "open_count": 3},
+            {"slug": "groceries", "name": "Groceries", "mode": "items", "open_count": 1},
+        ],
+        "todos": [
+            {"id": "a", "title": "Trash", "list": "chores", "assignee": "mer", "due_date": "2026-10-14", "done": False, "created_at": "1"},
+            {"id": "b", "title": "Vet", "list": "chores", "assignee": "michael", "due_date": None, "important": True, "my_day": "2026-10-16", "done": False, "created_at": "2"},
+            {"id": "c", "title": "Plants", "list": "chores", "assignee": "michael", "due_date": "2026-10-20", "repeat": "weekly", "done": False, "created_at": "3"},
+            {"id": "d", "title": "Eggs", "list": "groceries", "assignee": None, "due_date": None, "done": False, "created_at": "4"},
+            {"id": "e", "title": "Milk", "list": "groceries", "assignee": None, "due_date": None, "done": True, "created_at": "5"},
+        ],
+        "move_tasks": [],
+    }
+
+    def test_todos_defaults_to_open_on_every_list_soonest_first(self):
+        FakeApp.routes[("GET", "/api/todos")] = (200, self.TODOS)
+        result = self.call(tools.todos)
+        self.assertEqual([t["title"] for t in result["todos"]], ["Trash", "Plants", "Vet", "Eggs"])
+        self.assertTrue(result["todos"][0]["overdue"])
+        self.assertEqual(result["todos"][1]["repeat"], "weekly")
+        self.assertEqual(result["lists"][1], {"list": "groceries", "name": "Groceries", "kind": "items"})
+
+    def test_todos_filters(self):
+        FakeApp.routes[("GET", "/api/todos")] = (200, self.TODOS)
+        titles = lambda args: [t["title"] for t in self.call(tools.todos, args)["todos"]]
+        self.assertEqual(titles({"list": "groceries", "status": "all"}), ["Eggs", "Milk"])
+        self.assertEqual(titles({"list": "groceries", "status": "done"}), ["Milk"])
+        self.assertEqual(titles({"person": "michael"}), ["Plants", "Vet"])
+        self.assertEqual(titles({"view": "my_day"}), ["Vet"])
+        self.assertEqual(titles({"view": "important"}), ["Vet"])
+        self.assertEqual(titles({"view": "planned"}), ["Trash", "Plants"])
+        my_day = self.call(tools.todos, {"view": "my_day"})["todos"][0]
+        self.assertTrue(my_day["my_day"] and my_day["important"])
+
+    def test_todos_unknown_list_offers_the_real_ones(self):
+        FakeApp.routes[("GET", "/api/todos")] = (200, self.TODOS)
+        result = self.call(tools.todos, {"list": "hardware"})
+        self.assertEqual(result["error"], "No list called hardware. Benny can't create lists.")
+        self.assertEqual([l["list"] for l in result["available"]], ["chores", "groceries"])
+
+    def test_add_todo_hints_whoever_is_asking(self):
+        FakeApp.routes[("POST", "/api/todos")] = (201, {"todo": {"id": CHORE_ID, "title": "Call the vet", "list": "chores", "assignee": "mer", "due_date": "2026-10-16"}})
         with self.as_asker("mer"):
-            result = self.call(tools.add_chore, {"task": "call the vet about Quincy on Friday"})
-        self.assertEqual(FakeApp.requests[0]["body"], {"text": "Mer: call the vet about Quincy on Friday"})
-        self.assertEqual(result["chore"]["assignee"], "mer")
+            result = self.call(tools.add_todo, {"task": "call the vet about Quincy on Friday"})
+        self.assertEqual(
+            FakeApp.requests[0]["body"],
+            {"text": "call the vet about Quincy on Friday", "list": "chores", "assignee_hint": "mer"},
+        )
+        self.assertEqual(result["todo"]["assignee"], "mer")
         self.assertIn("Read back", result["tell_them"])
 
-    def test_add_chore_uses_the_named_assignee(self):
-        FakeApp.routes[("POST", "/api/chores")] = (201, {"chore": {}})
+    def test_add_todo_uses_the_named_assignee_and_list(self):
+        FakeApp.routes[("POST", "/api/todos")] = (201, {"todo": {}})
         with self.as_asker("mer"):
-            self.call(tools.add_chore, {"task": "mow the lawn", "assignee": "Michael"})
-        self.assertEqual(FakeApp.requests[0]["body"], {"text": "Michael: mow the lawn"})
+            self.call(tools.add_todo, {"task": "mow the lawn", "assignee": "Michael", "list": "Yard"})
+        self.assertEqual(FakeApp.requests[0]["body"], {"text": "mow the lawn", "list": "yard", "assignee_hint": "michael"})
 
-    def test_add_chore_asks_when_nobody_is_known(self):
+    def test_add_todo_asks_when_nobody_is_known(self):
         with self.as_asker(None):
-            result = self.call(tools.add_chore, {"task": "mow the lawn"})
+            result = self.call(tools.add_todo, {"task": "mow the lawn"})
         self.assertIn("Ask who", result["error"])
         self.assertEqual(FakeApp.requests, [])
 
-    def test_chores_defaults_to_open(self):
-        FakeApp.routes[("GET", "/api/chores")] = (200, {"chores": [
-            {"id": CHORE_ID, "title": "A", "completed": False},
-            {"id": CHORE_ID, "title": "B", "completed": True},
-        ]})
-        result = self.call(tools.chores)
-        self.assertEqual([c["title"] for c in result["chores"]], ["A"])
+    def test_add_todo_to_an_item_list_points_at_add_to_list(self):
+        FakeApp.routes[("POST", "/api/todos")] = (400, {"error": "Groceries takes items as typed: send them to /api/lists/groceries/items."})
+        with self.as_asker("mer"):
+            result = self.call(tools.add_todo, {"task": "eggs", "list": "groceries"})
+        self.assertEqual(result["error"], "groceries is an item list: use benny_add_to_list.")
+
+    def test_done_on_a_repeating_todo_says_when_the_next_is_due(self):
+        FakeApp.routes[("PATCH", f"/api/todos/{CHORE_ID}")] = (200, {"todo": {"id": CHORE_ID, "title": "Plants", "due_date": "2026-10-27", "repeat": "weekly"}, "rolled": True})
+        result = self.call(tools.set_todo_done, {"todo_id": CHORE_ID})
+        self.assertEqual(FakeApp.requests[0]["body"], {"done": True})
+        self.assertIn("2026-10-27", result["tell_them"])
 
     def test_ids_are_checked_before_they_reach_a_url(self):
         for handler, args in [
-            (tools.set_chore_done, {"chore_id": "../lists/groceries/items/checked"}),
-            (tools.check_off, {"item_id": "abc"}),
+            (tools.set_todo_done, {"todo_id": "../lists/groceries/items/checked"}),
+            (tools.set_todo_done, {"todo_id": "abc"}),
+            (tools.todos, {"list": "../chores"}),
+            (tools.add_to_list, {"list": "../chores", "items": ["x"]}),
+            (tools.add_todo, {"list": "../x", "task": "x"}),
         ]:
             self.assertIn("error", self.call(handler, args))
-        self.assertIn("error", self.call(tools.list_items, {"list": "../chores"}))
         self.assertEqual(FakeApp.requests, [])
 
     # --- lists ------------------------------------------------------------
@@ -189,11 +240,11 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(result["already_on_list"], ["oat milk"])
 
     def test_unknown_list_offers_the_real_ones(self):
-        FakeApp.routes[("GET", "/api/lists/hardware/items")] = (404, {"error": "No list by that name."})
-        FakeApp.routes[("GET", "/api/lists")] = (200, {"lists": [{"slug": "groceries", "name": "Groceries", "open_count": 2}]})
-        result = self.call(tools.list_items, {"list": "hardware"})
+        FakeApp.routes[("POST", "/api/lists/hardware/items")] = (404, {"error": "No list by that name."})
+        FakeApp.routes[("GET", "/api/lists")] = (200, {"lists": [{"slug": "groceries", "name": "Groceries", "mode": "items", "open_count": 2}]})
+        result = self.call(tools.add_to_list, {"list": "hardware", "items": ["nails"]})
         self.assertEqual(result["error"], "No list by that name. Benny can't create lists.")
-        self.assertEqual(result["available"], [{"list": "groceries", "name": "Groceries"}])
+        self.assertEqual(result["available"], [{"list": "groceries", "name": "Groceries", "kind": "items"}])
 
     # --- proposals --------------------------------------------------------
 
@@ -409,16 +460,16 @@ class PluginTest(unittest.TestCase):
     # --- errors -----------------------------------------------------------
 
     def test_a_route_off_the_allowlist_says_not_to_work_around_it(self):
-        FakeApp.routes[("GET", "/api/chores")] = (403, {"error": "The agent isn't allowed to use this route."})
-        self.assertIn("on purpose", self.call(tools.chores)["error"])
+        FakeApp.routes[("GET", "/api/todos")] = (403, {"error": "The agent isn't allowed to use this route."})
+        self.assertIn("on purpose", self.call(tools.todos)["error"])
 
     def test_a_rejected_token_says_what_to_do(self):
-        FakeApp.routes[("GET", "/api/chores")] = (401, {"error": "Unauthorized"})
-        self.assertIn("Tell Michael", self.call(tools.chores)["error"])
+        FakeApp.routes[("GET", "/api/todos")] = (401, {"error": "Unauthorized"})
+        self.assertIn("Tell Michael", self.call(tools.todos)["error"])
 
     def test_missing_settings_are_an_error_not_a_crash(self):
         with mock.patch.dict(os.environ, {"BENNY_AGENT_TOKEN": ""}):
-            self.assertIn("isn't set", self.call(tools.chores)["error"])
+            self.assertIn("isn't set", self.call(tools.todos)["error"])
 
     # --- registration -----------------------------------------------------
 

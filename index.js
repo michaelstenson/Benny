@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { helloRouter } from './server/routes/hello.js';
 import { authRouter } from './server/routes/auth.js';
 import { calendarRouter } from './server/routes/calendar.js';
-import { choresRouter } from './server/routes/chores.js';
+import { todosRouter } from './server/routes/todos.js';
 import { billsRouter } from './server/routes/bills.js';
 import { compsRouter } from './server/routes/comps.js';
 import { resideoAuthRouter } from './server/routes/resideoAuth.js';
@@ -27,7 +27,6 @@ import { adviceRouter } from './server/routes/advice.js';
 import { digestRouter } from './server/routes/digest.js';
 import { gmailRouter } from './server/routes/gmail.js';
 import { timelineRouter } from './server/routes/timeline.js';
-import { listsRouter } from './server/routes/lists.js';
 import { recurringBillsRouter } from './server/routes/recurringBills.js';
 import { proposalsRouter } from './server/routes/proposals.js';
 import { projectsRouter } from './server/routes/projects.js';
@@ -72,10 +71,10 @@ app.use('/auth', requireUser());
 
 // Mount our API routes under /api — so hello.js's "/hello" becomes
 // the real path "/api/hello", calendar.js's "/calendar/events" becomes
-// "/api/calendar/events", and chores.js's "/chores" becomes "/api/chores".
+// "/api/calendar/events", and todos.js's "/todos" becomes "/api/todos".
 app.use('/api', helloRouter);
 app.use('/api', calendarRouter);
-app.use('/api', choresRouter);
+app.use('/api', todosRouter);
 app.use('/api', billsRouter);
 app.use('/api', compsRouter);
 app.use('/api', smarthomeRouter);
@@ -83,7 +82,6 @@ app.use('/api', adviceRouter);
 app.use('/api', digestRouter);
 app.use('/api', gmailRouter);
 app.use('/api', timelineRouter);
-app.use('/api', listsRouter);
 app.use('/api', recurringBillsRouter);
 app.use('/api', proposalsRouter);
 app.use('/api', projectsRouter);

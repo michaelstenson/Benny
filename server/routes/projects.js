@@ -14,6 +14,8 @@ import { Router } from 'express';
 import { supabaseAdmin } from '../lib/supabaseClient.js';
 import { householdToday, daysBetween } from '../lib/recurringBills.js';
 import {
+  MAX_FOCUS,
+  OPEN_STATUSES,
   OWNERS,
   PEOPLE,
   addDays,
@@ -286,7 +288,7 @@ projectsRouter.patch('/tasks/:id', async (req, res) => {
   try {
     const { data: task, error: loadError } = await supabaseAdmin
       .from('tasks')
-      .select(TASK_COLUMNS)
+      .select(`${TASK_COLUMNS}, project_id`)
       .eq('id', req.params.id)
       .maybeSingle();
     if (loadError) throw loadError;
@@ -296,6 +298,21 @@ projectsRouter.patch('/tasks/:id', async (req, res) => {
     const { update, rolled, error: invalid } = buildTaskUpdate(task, req.body, today);
     if (invalid) return fail(res, 400, invalid);
     if ('owner' in update && update.owner !== 'both') update.lead = null;
+
+    // This week's focus holds MAX_FOCUS open tasks. Checked here rather
+    // than only on the Move page, since To-Do stars move tasks too.
+    if (update.focus === true && !task.focus) {
+      const { count, error: countError } = await supabaseAdmin
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', task.project_id)
+        .eq('focus', true)
+        .in('status', OPEN_STATUSES);
+      if (countError) throw countError;
+      if (count >= MAX_FOCUS) {
+        return fail(res, 409, `This week's focus already has ${MAX_FOCUS}. Unstar one first.`);
+      }
+    }
 
     const { data, error } = await supabaseAdmin
       .from('tasks')
