@@ -1735,7 +1735,8 @@ a list. Chores and Groceries are lists, and you can make more.
   Completed shows "✓ Mer · Today, 7:23 PM", and a finished to-do's footer
   says "Completed by Mer". An open one's footer says who added it. The
   names come from `PERSON_EMAILS`; anything finished before Oct 18, 2026
-  has no name, since nothing kept it. This came from Limes and Totopos
+  has no name, since nothing kept it. Ticked off through Benny, it's
+  whoever asked Benny (see "Who got the limes?" below). This came from Limes and Totopos
   being ticked off one evening with no way to tell by whom.
 
 The homepage's Chores and Lists tiles became one To-Do tile. The Today
@@ -1768,6 +1769,16 @@ goes along as the hint), `benny_add_to_list` (unchanged) and
 `benny_set_todo_done` (says when a repeating one is next due) replaced
 `benny_chores`, `benny_add_chore`, `benny_set_chore_done`, `benny_list`
 and `benny_check_off`.
+
+**Who got the limes?** (Oct 18) `benny_todos` with `status: done` lists
+the newest finished first, each with `done_by` and `done_at` already in
+Chicago time ("Sat Oct 17, 7:14 PM"), since converting UTC is where a
+model slips. When Benny ticks one off for one of us, the plugin sends
+`asker` (from the chat session, never the model) and the app records
+that person, not Benny. Only the agent's token can name someone, and
+only Michael or Mer (`actorOf` in `server/lib/people.js`); with no
+known asker it's `benny`. The plugin on the Pi needs re-copying for
+this (see "Benny plugin for Hermes").
 
 **Schema change** (`scripts/todo_merge.sql`, applied as the `todo_merge`
 migration). It's additive: `lists` gets `emoji`, `mode` (`tasks` or

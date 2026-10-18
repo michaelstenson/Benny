@@ -19,7 +19,7 @@ import { householdToday } from '../lib/recurringBills.js';
 import { PEOPLE } from '../lib/moveTasks.js';
 import { parseTodoText } from '../lib/todoParser.js';
 import { MODES, buildTodoUpdate, cleanTitle } from '../lib/todos.js';
-import { personOf } from '../lib/people.js';
+import { actorOf, personOf } from '../lib/people.js';
 
 export const todosRouter = Router();
 
@@ -52,9 +52,10 @@ function who(req) {
   };
 }
 
-// 'michael', 'mer' or 'benny': who ticked it off, kept as done_by.
+// 'michael', 'mer' or 'benny': who ticked it off, kept as done_by. When
+// Benny ticks one off, the plugin's `asker` says which of us asked.
 function actor(req) {
-  return personOf(who(req).created_by);
+  return actorOf(req.user, req.body?.asker);
 }
 
 async function findList(slug) {

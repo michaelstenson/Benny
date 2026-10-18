@@ -18,6 +18,16 @@ export function personOf(actor, emails = process.env.PERSON_EMAILS) {
   return null;
 }
 
+// Who gets the credit for a change, like ticking a to-do off: the one of
+// us who's signed in, or, when Benny does it for one of us, whoever asked.
+// The Hermes plugin sends `asker` from its chat session, never from the
+// model. Only the agent's token can name someone, and only michael or mer;
+// anything else Benny does is 'benny'.
+export function actorOf(user, asker, emails = process.env.PERSON_EMAILS) {
+  if (user?.agent) return PEOPLE.includes(asker) ? asker : 'benny';
+  return personOf(user?.email, emails);
+}
+
 if (!process.env.PERSON_EMAILS) {
   console.warn('[people] PERSON_EMAILS is empty — To-Do will show who ticked things off as nobody.');
 }

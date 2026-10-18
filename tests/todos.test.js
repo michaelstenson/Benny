@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTodoUpdate } from '../server/lib/todos.js';
-import { personOf } from '../server/lib/people.js';
+import { actorOf, personOf } from '../server/lib/people.js';
 
 const TODAY = '2026-10-17';
 const NOW = new Date('2026-10-18T00:23:02Z');
@@ -68,4 +68,18 @@ test('personOf calls the agent Benny, and knows nobody else', () => {
 
 test('personOf only maps to michael or mer', () => {
   assert.equal(personOf('x@example.com', 'benny:x@example.com,quincy:x@example.com'), null);
+});
+
+test('actorOf: a signed-in person is themselves, whatever asker says', () => {
+  assert.equal(actorOf({ email: 'mer@example.com' }, undefined, EMAILS), 'mer');
+  assert.equal(actorOf({ email: 'mer@example.com' }, 'michael', EMAILS), 'mer');
+});
+
+test('actorOf: Benny gets the credit unless it says which of us asked', () => {
+  const agent = { email: null, agent: true };
+  assert.equal(actorOf(agent, 'mer', EMAILS), 'mer');
+  assert.equal(actorOf(agent, 'michael', EMAILS), 'michael');
+  assert.equal(actorOf(agent, undefined, EMAILS), 'benny');
+  assert.equal(actorOf(agent, 'quincy', EMAILS), 'benny');
+  assert.equal(actorOf(agent, { toString: () => 'mer' }, EMAILS), 'benny');
 });

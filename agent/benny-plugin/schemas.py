@@ -36,7 +36,8 @@ UPCOMING = tool(
 TODOS = tool(
     "benny_todos",
     "To-dos from the app's To-Do lists (Chores, Groceries and any others), with ids. Default open ones "
-    "on every list, soonest due first. Also lists the lists. Move tasks are in benny_upcoming.",
+    "on every list, soonest due first. status=done: newest first, with who ticked each off (done_by) and "
+    "when, for 'who got the limes?'. Also lists the lists. Move tasks are in benny_upcoming.",
     {
         "list": TODO_LIST,
         "person": PERSON,
@@ -67,8 +68,8 @@ ADD_TO_LIST = tool(
 
 SET_TODO_DONE = tool(
     "benny_set_todo_done",
-    "Tick a to-do or list item off (done, bought) or back on. Get the id from benny_todos; if more than "
-    "one could match, ask. For 'got everything', list the items back first.",
+    "Tick a to-do or list item off (done, bought) or back on, as done by whoever is asking. Get the id "
+    "from benny_todos; if more than one could match, ask. For 'got everything', list the items back first.",
     {"todo_id": {"type": "string"}, "done": {"type": "boolean", "description": "Default true."}},
     ["todo_id"],
 )

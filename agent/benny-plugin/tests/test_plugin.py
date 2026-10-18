@@ -220,6 +220,43 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(FakeApp.requests[0]["body"], {"done": True})
         self.assertIn("2026-10-27", result["tell_them"])
 
+    def test_finished_todos_say_who_ticked_them_off_and_when_newest_first(self):
+        FakeApp.routes[("GET", "/api/todos")] = (200, dict(self.TODOS, todos=[
+            {"id": "f", "title": "Limes", "list": "groceries", "assignee": "michael", "due_date": None, "done": True,
+             "done_by": "mer", "done_at": "2026-10-18T00:14:32.121+00:00", "created_at": "6"},
+            {"id": "g", "title": "Totopos", "list": "groceries", "assignee": "michael", "due_date": None, "done": True,
+             "done_by": "michael", "done_at": "2026-10-18T00:23:02.8+00:00", "created_at": "7"},
+            {"id": "h", "title": "Berries", "list": "groceries", "assignee": None, "due_date": None, "done": True,
+             "done_by": None, "done_at": "2026-10-16T15:04:00Z", "created_at": "8"},
+        ]))
+        result = self.call(tools.todos, {"list": "groceries", "status": "done"})
+        self.assertEqual([t["title"] for t in result["todos"]], ["Totopos", "Limes", "Berries"])
+        self.assertEqual(result["todos"][1], {
+            "id": "f", "title": "Limes", "list": "groceries", "assignee": "michael", "due_date": None,
+            "done": True, "done_by": "mer", "done_at": "Sat Oct 17, 7:14 PM",
+        })
+        self.assertEqual(result["todos"][0]["done_at"], "Sat Oct 17, 7:23 PM")
+        # Ticked off before Oct 18, 2026: when, but nobody kept who.
+        self.assertNotIn("done_by", result["todos"][2])
+        self.assertEqual(result["todos"][2]["done_at"], "Fri Oct 16, 10:04 AM")
+        self.assertIn("done_by", result["done_note"])
+
+    def test_done_credits_whoever_asked(self):
+        FakeApp.routes[("PATCH", f"/api/todos/{CHORE_ID}")] = (200, {"todo": {
+            "id": CHORE_ID, "title": "Limes", "list": "groceries", "done": True,
+            "done_by": "mer", "done_at": "2026-10-18T00:14:32.121+00:00",
+        }})
+        with self.as_asker("mer"):
+            result = self.call(tools.set_todo_done, {"todo_id": CHORE_ID})
+        self.assertEqual(FakeApp.requests[0]["body"], {"done": True, "asker": "mer"})
+        self.assertEqual((result["todo"]["done_by"], result["todo"]["done_at"]), ("mer", "Sat Oct 17, 7:14 PM"))
+
+    def test_local_time_falls_back_to_utc_without_time_zone_data(self):
+        with mock.patch.object(tools, "ZoneInfo", side_effect=tools.ZoneInfoNotFoundError):
+            self.assertEqual(tools._local_time("2026-10-18T00:14:32Z"), "Sun Oct 18, 12:14 AM UTC")
+        self.assertIsNone(tools._local_time(None))
+        self.assertIsNone(tools._local_time("yesterday"))
+
     def test_ids_are_checked_before_they_reach_a_url(self):
         for handler, args in [
             (tools.set_todo_done, {"todo_id": "../lists/groceries/items/checked"}),
