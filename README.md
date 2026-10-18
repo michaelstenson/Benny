@@ -29,6 +29,7 @@ benny/
 │   │   ├── anthropicClient.js  # one shared Claude client
 │   │   ├── todoParser.js       # turns free text into {title, assignee, due_date} via Claude tool use (was choreParser.js)
 │   │   ├── todos.js            # To-Do rules: what a change may do, when a repeating to-do comes due again
+│   │   ├── people.js           # which of us an email is (PERSON_EMAILS), for To-Do's "✓ Mer" (Oct 2026)
 │   │   ├── billParser.js       # turns free text into {category, amount, billing_month} via Claude tool use
 │   │   ├── rentcastClient.js   # calls RentCast's AVM endpoint for a home value + comps
 │   │   ├── compsSummary.js     # turns that data into a short plain-language paragraph via Claude
@@ -77,8 +78,8 @@ benny/
 │   └── escape.js           # escapeHtml() for titles that came from outside (Stage 18)
 ├── agent/benny-plugin/      # Hermes plugin: Benny the agent's tools for this app's API
 ├── agent/scripts/           # scripts Hermes runs on the Pi (the morning brief)
-├── scripts/                 # one-time setup: the Stage 22, To-Do and Stage 23 migrations + the roadmap importer
-├── tests/                   # `npm test`: node:test checks of the pet care rules (Stage 23)
+├── scripts/                 # one-time setup: the Stage 22, To-Do (two) and Stage 23 migrations + the roadmap importer
+├── tests/                   # `npm test`: node:test checks of the pet care and To-Do rules
 ├── powerview-bridge/        # standalone script that runs on a Raspberry Pi at home,
 │                             # not part of the Vercel app — see its own README.md
 ├── .env.example            # template for required environment variables
@@ -914,6 +915,9 @@ giving agent Benny a scoped token while the front door is unlocked.
 - **`ALLOWED_EMAILS`** (comma-separated) is the list of who may sign in,
   checked both before an email is sent and after sign-in. If it's unset,
   nobody gets in: it fails closed, not open.
+- **`PERSON_EMAILS`** (Oct 2026, `michael:…,mer:…`) says which of us each
+  of those emails is. To-Do uses it to name who ticked a to-do off and
+  who added it (`server/lib/people.js`); without it, it names nobody.
 - **Pages stay static.** Vercel's CDN serves `public/*.html` directly, so
   the server can't gate the HTML itself, but nothing sensitive lives in
   it. `public/auth-guard.js` (loaded first on every page except login and
@@ -1722,6 +1726,17 @@ a list. Chores and Groceries are lists, and you can make more.
   typing, and drops an answer that one of your changes overtook, so it
   can't undo a tap. It never redraws the add box, so a phone's keyboard
   stays up. The calendar and weather only refetch when you come back.
+- **Ticking off says so, with an Undo** (Oct 18), the way Microsoft To
+  Do does: "Ticked off “Totopos” · Undo" for six seconds. Undo puts back
+  what the tick changed, including a repeating one's due date and steps,
+  or a move task's status. A repeating move task that rolled to its next
+  date has no Undo, since the tracker has already counted it.
+- **Who ticked it off** is kept (`done_by`: michael, mer or benny):
+  Completed shows "✓ Mer · Today, 7:23 PM", and a finished to-do's footer
+  says "Completed by Mer". An open one's footer says who added it. The
+  names come from `PERSON_EMAILS`; anything finished before Oct 18, 2026
+  has no name, since nothing kept it. This came from Limes and Totopos
+  being ticked off one evening with no way to tell by whom.
 
 The homepage's Chores and Lists tiles became one To-Do tile. The Today
 card, the Timeline and the morning brief show due to-dos from every list.
@@ -1734,7 +1749,7 @@ isn't Chores. `/chores.html` and `/lists.html` redirect to the right list.
 |---|---|
 | `GET /api/todos`: lists, open to-dos, to-dos finished in the last 30 days, open move tasks with a date | ✅ |
 | `POST /api/todos`: `{ text, list?, assignee_hint?, defaults? }`, parsed by Claude, "tasks" lists only | ✅ |
-| `PATCH /api/todos/:id`: title, done, important, my_day, due_date, repeat, assignee, list, notes, steps | ✅ |
+| `PATCH /api/todos/:id`: title, done, important, my_day, due_date, repeat, assignee, list, notes, steps (a tick keeps who did it) | ✅ |
 | `DELETE /api/todos/:id` | ❌ app only |
 | `GET /api/lists`, `GET /api/lists/:slug/items`, `POST /api/lists/:slug/items` (Stage 19's shapes) | ✅ |
 | `POST /api/lists`, `PATCH /api/lists/:slug`, `DELETE /api/lists/:slug` | ❌ app only |
@@ -1776,6 +1791,12 @@ database):
 
 All four steps were done on Oct 16, 2026. The plugin from before To-Do
 is backed up at `~/.hermes/plugins-benny-bak-20261016` on the Pi.
+
+**Second schema change** (`scripts/todo_done_by.sql`, applied as the
+`todo_done_by` migration on Oct 18, 2026): `todos.done_by`, additive and
+empty to start. It has to go in before the code that reads it, because
+`GET /api/todos` selects it. `PERSON_EMAILS` was set in Vercel the same
+day.
 
 ## Stage 23: Pet care
 

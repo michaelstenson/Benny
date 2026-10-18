@@ -60,7 +60,9 @@ function rememberView(view) {
   }
 }
 
-function flash(message, isError) {
+// A message at the bottom for a few seconds. With `undo`, it carries an
+// Undo button and stays a little longer.
+function flash(message, isError, undo) {
   let el = $('flash');
   if (!el) {
     el = document.createElement('div');
@@ -68,11 +70,18 @@ function flash(message, isError) {
     el.className = 'hl-flash';
     document.body.appendChild(el);
   }
-  el.textContent = message;
+  el.innerHTML = `<span>${esc(message)}</span>${undo ? '<button class="hl-flash-undo">Undo</button>' : ''}`;
+  if (undo) {
+    el.querySelector('button').onclick = () => {
+      el.classList.remove('is-visible');
+      undo();
+    };
+  }
   el.classList.toggle('is-error', Boolean(isError));
+  el.classList.toggle('has-undo', Boolean(undo));
   el.classList.add('is-visible');
   clearTimeout(flash.timer);
-  flash.timer = setTimeout(() => el.classList.remove('is-visible'), 3500);
+  flash.timer = setTimeout(() => el.classList.remove('is-visible'), undo ? 6000 : 3500);
 }
 
 async function api(method, url, body) {
@@ -113,6 +122,25 @@ function dateLabel(date) {
     options.year = 'numeric';
   }
   return new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, options);
+}
+
+// Michael, Mer or Benny, or null for nobody known.
+function personName(person) {
+  return person === 'benny' ? 'Benny' : PEOPLE[person]?.label || null;
+}
+
+// "Today, 7:23 PM" or "Yesterday, 7:23 PM"; older ones just the date. The
+// day is this device's, like the time, not the household's: dateLabel's
+// Chicago "today" would call 1 AM in Amsterdam "Tomorrow".
+function doneWhen(todo) {
+  const at = new Date(todo.done_at);
+  const day = (d) => d.toLocaleDateString('en-CA');
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const time = at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (day(at) === day(new Date())) return `Today, ${time}`;
+  if (day(at) === day(yesterday)) return `Yesterday, ${time}`;
+  return at.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function dot(person, size = 'sm') {
@@ -231,6 +259,11 @@ function renderNav() {
 
 function metaFor(item, view) {
   const meta = [];
+  if (!isMove(item) && item.done && item.done_at) {
+    // Who ticked it off, which the server has kept since Oct 18, 2026.
+    const name = personName(item.done_by);
+    meta.push(`<span>✓ ${name ? `${esc(name)} · ` : ''}${esc(doneWhen(item))}</span>`);
+  }
   if (isMove(item)) meta.push(`<span class="hl-todo-tag">Move · ${esc(item.code || '')}</span>`);
   else if (SMART[view]) {
     const list = listOf(item.list);
@@ -405,9 +438,16 @@ function renderMain() {
   $('main-body').innerHTML = body;
 }
 
-function addedLabel(item) {
+// The detail's footer, as To Do has it: who finished it and when, or who
+// added it.
+function footLabel(item) {
+  if (item.done && item.done_at) {
+    const name = personName(item.done_by);
+    return `Completed ${name ? `by ${name} · ` : ''}${doneWhen(item)}`;
+  }
   const when = new Date(item.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  return item.source === 'agent' ? `Added by Benny · ${when}` : `Added ${when}`;
+  const name = personName(item.added_by);
+  return name ? `Added by ${name} · ${when}` : `Added ${when}`;
 }
 
 function renderDetail() {
@@ -476,7 +516,7 @@ function renderDetail() {
       </select></label>
     </div>
     <textarea class="hl-todo-notes" id="notes-edit" maxlength="2000" placeholder="Add a note">${esc(item.notes || '')}</textarea>
-    <div class="hl-todo-foot"><span>${esc(addedLabel(item))}</span>
+    <div class="hl-todo-foot"><span>${esc(footLabel(item))}</span>
       <span><button class="hl-todo-icon-btn" data-delete="${item.id}" aria-label="Delete" title="Delete">🗑</button><button class="hl-todo-icon-btn" data-close aria-label="Close">✕</button></span></div>`;
 }
 
@@ -488,20 +528,43 @@ function screen(name) {
 // --- Saving -----------------------------------------------------------------
 
 // Shows the change straight away, then keeps whatever the server saved
-// (or puts it back and says why).
+// (or puts it back and says why). Returns { rolled }, or null if it failed.
 async function patchTodo(todo, body, local = {}) {
   const before = { ...todo };
   Object.assign(todo, local);
   render();
+  let result = null;
   try {
     const { todo: saved, rolled } = await api('PATCH', `/api/todos/${todo.id}`, body);
     Object.assign(todo, saved, { kind: 'todo' });
-    if (rolled) flash(`Done. The next one is due ${dateLabel(saved.due_date)}.`);
+    result = { rolled };
   } catch (err) {
     Object.assign(todo, before);
     flash(err.message, true);
   }
   render();
+  return result;
+}
+
+// Ticking off says so at the bottom with an Undo, as To Do does: it's easy
+// to tap the wrong circle on a phone, and a finished to-do folds away under
+// Completed. Undo puts back what the tick changed, including a repeating
+// one's due date and steps. Unticking needs no Undo; it's one tap back.
+async function tickTodo(todo) {
+  if (todo.done) return patchTodo(todo, { done: false }, { done: false, done_at: null, done_by: null });
+  const { id, title, due_date: due, steps } = todo;
+  const result = await patchTodo(todo, { done: true }, { done: true, done_at: new Date().toISOString() });
+  if (!result) return;
+  if (result.rolled) {
+    flash(`Done. The next one is due ${dateLabel(todo.due_date)}.`, false, () => undoTick(id, { due_date: due, steps }));
+  } else {
+    flash(`Ticked off “${title}”`, false, () => undoTick(id, { done: false }, { done_at: null, done_by: null }));
+  }
+}
+
+function undoTick(id, body, local = {}) {
+  const todo = find(id); // a refresh may have swapped in a fresh copy
+  if (todo) patchTodo(todo, body, { ...body, ...local });
 }
 
 async function patchMoveTask(task, body, local = {}) {
@@ -512,13 +575,29 @@ async function patchMoveTask(task, body, local = {}) {
     const { task: saved, rolled } = await api('PATCH', `/api/tasks/${task.id}`, body);
     if (body.status === 'done' && !rolled) {
       data.move_tasks = data.move_tasks.filter((t) => t.id !== task.id);
-      flash(`${task.code || 'Move task'} marked done in the move tracker.`);
+      flash(`${task.code || 'Move task'} marked done in the move tracker.`, false, () => reopenMoveTask(task, before.status));
     } else {
       Object.assign(task, { focus: saved.focus, due_date: saved.due_date, status: saved.status });
       if (rolled) flash(`${task.code || 'Done'}: the next one is due ${dateLabel(saved.due_date)}.`);
     }
   } catch (err) {
     Object.assign(task, before);
+    flash(err.message, true);
+  }
+  render();
+}
+
+// Undo for a move task ticked off here: back to the status it had (to do,
+// doing or waiting) and back on the page. A repeating one that rolled to
+// its next date gets no Undo, since the tracker has already counted it.
+async function reopenMoveTask(task, status) {
+  data.move_tasks = [...data.move_tasks.filter((t) => t.id !== task.id), task];
+  render();
+  try {
+    const { task: saved } = await api('PATCH', `/api/tasks/${task.id}`, { status });
+    Object.assign(task, { status: saved.status, due_date: saved.due_date, focus: saved.focus });
+  } catch (err) {
+    data.move_tasks = data.move_tasks.filter((t) => t.id !== task.id);
     flash(err.message, true);
   }
   render();
@@ -676,7 +755,7 @@ document.addEventListener('click', async (event) => {
   if (ds.check) {
     const item = find(ds.check);
     if (isMove(item)) return patchMoveTask(item, { status: 'done' });
-    return patchTodo(item, { done: !item.done }, { done: !item.done, done_at: item.done ? null : new Date().toISOString() });
+    return tickTodo(item);
   }
   if (ds.star) {
     const item = find(ds.star);

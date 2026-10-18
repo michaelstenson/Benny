@@ -489,6 +489,10 @@ input[type='checkbox'] {
 }
 .hl-flash.is-visible { opacity: 1; transform: translate(-50%, 0); }
 .hl-flash.is-error { border-color: var(--hl-up); }
+/* To-Do's "Ticked off … Undo": the only flash you can tap. */
+.hl-flash.has-undo { display: flex; align-items: center; gap: 16px; width: max-content; box-sizing: border-box; }
+.hl-flash.has-undo.is-visible { pointer-events: auto; }
+.hl-flash-undo { flex-shrink: 0; background: none; border: none; color: var(--hl-gold); font: inherit; font-weight: 700; padding: 4px 0; cursor: pointer; }
 
 /* To-Do (Oct 2026): Microsoft To Do's layout in Harbor Lights. Desktop is
    three columns (lists, a list, a task); a phone shows one at a time,

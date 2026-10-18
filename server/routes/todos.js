@@ -19,13 +19,14 @@ import { householdToday } from '../lib/recurringBills.js';
 import { PEOPLE } from '../lib/moveTasks.js';
 import { parseTodoText } from '../lib/todoParser.js';
 import { MODES, buildTodoUpdate, cleanTitle } from '../lib/todos.js';
+import { personOf } from '../lib/people.js';
 
 export const todosRouter = Router();
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SLUG_PATTERN = /^[a-z0-9-]+$/;
 const TODO_COLUMNS =
-  'id, title, assignee, due_date, important, my_day, repeat, notes, steps, done, done_at, ' +
+  'id, title, assignee, due_date, important, my_day, repeat, notes, steps, done, done_at, done_by, ' +
   'raw_input, source, created_by, created_at, updated_at, list:lists!inner(slug)';
 const LIST_COLUMNS = 'id, slug, name, emoji, mode, position';
 const DONE_SHOWN_DAYS = 30; // how long a finished to-do stays under "Completed"
@@ -38,9 +39,10 @@ function fail(res, status, error) {
 }
 
 // The list comes back nested from the join; the page only needs its slug.
+// added_by is created_by as a person, for "Added by Mer".
 function toTodo(row) {
   const { list, ...todo } = row;
-  return { ...todo, list: list.slug };
+  return { ...todo, list: list.slug, added_by: personOf(todo.created_by) };
 }
 
 function who(req) {
@@ -48,6 +50,11 @@ function who(req) {
     source: req.user.agent ? 'agent' : 'app',
     created_by: req.user.agent ? 'agent' : req.user.email,
   };
+}
+
+// 'michael', 'mer' or 'benny': who ticked it off, kept as done_by.
+function actor(req) {
+  return personOf(who(req).created_by);
 }
 
 async function findList(slug) {
@@ -170,7 +177,7 @@ todosRouter.patch('/todos/:id', async (req, res) => {
     const todo = await findTodo(req.params.id);
     if (!todo) return fail(res, 404, 'No to-do with that id.');
 
-    const { update, rolled, error: invalid } = buildTodoUpdate(todo, body, householdToday());
+    const { update, rolled, error: invalid } = buildTodoUpdate(todo, body, householdToday(), { by: actor(req) });
     if (invalid) return fail(res, 400, invalid);
     if ('list' in body) {
       const list = await findList(body.list);
@@ -420,10 +427,10 @@ function toChore(todo) {
   };
 }
 
-async function setDone(id, done) {
+async function setDone(id, done, by) {
   const todo = await findTodo(id);
   if (!todo) return null;
-  const { update } = buildTodoUpdate(todo, { done }, householdToday());
+  const { update } = buildTodoUpdate(todo, { done }, householdToday(), { by });
   const { data, error } = await supabaseAdmin.from('todos').update(update).eq('id', id).select(TODO_COLUMNS).single();
   if (error) throw error;
   return data;
@@ -477,7 +484,7 @@ todosRouter.patch('/chores/:id', async (req, res) => {
   const { completed } = req.body ?? {};
   if (typeof completed !== 'boolean') return fail(res, 400, '"completed" must be true or false.');
   try {
-    const todo = await setDone(req.params.id, completed);
+    const todo = await setDone(req.params.id, completed, actor(req));
     if (!todo) return fail(res, 404, 'No chore with that id.');
     res.json({ chore: toChore(todo) });
   } catch (err) {
@@ -490,7 +497,7 @@ todosRouter.patch('/list-items/:id', async (req, res) => {
   const { checked } = req.body ?? {};
   if (typeof checked !== 'boolean') return fail(res, 400, '"checked" must be true or false.');
   try {
-    const todo = await setDone(req.params.id, checked);
+    const todo = await setDone(req.params.id, checked, actor(req));
     if (!todo) return fail(res, 404, 'No item with that id.');
     res.json({ item: toItem(todo) });
   } catch (err) {

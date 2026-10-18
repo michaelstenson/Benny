@@ -52,8 +52,9 @@ function cleanSteps(value) {
 
 // Validates a PATCH body against the to-do it changes. Returns { update,
 // rolled } or { error }. Moving to another list is the route's job (it
-// needs a lookup), so `list` isn't handled here.
-export function buildTodoUpdate(todo, body, today, now = new Date()) {
+// needs a lookup), so `list` isn't handled here. `by` is who's making the
+// change ('michael', 'mer', 'benny' or null), kept as done_by on a tick.
+export function buildTodoUpdate(todo, body, today, { by = null, now = new Date() } = {}) {
   const update = {};
 
   if ('title' in body) {
@@ -110,9 +111,12 @@ export function buildTodoUpdate(todo, body, today, now = new Date()) {
       update.steps = (update.steps || todo.steps || []).map((step) => ({ ...step, done: false }));
       update.done = false;
       update.done_at = null;
+      update.done_by = null;
     } else {
+      // Ticking off one that's already done keeps who and when.
       update.done = body.done;
       update.done_at = body.done ? (todo.done ? todo.done_at : now.toISOString()) : null;
+      update.done_by = body.done ? (todo.done ? todo.done_by : by) : null;
     }
   }
 
