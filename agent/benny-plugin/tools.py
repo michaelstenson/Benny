@@ -269,6 +269,15 @@ def set_todo_done(args):
     todo = _slim_todo(result.get("todo", {}))
     if result.get("rolled"):
         return _ok(todo=todo, tell_them=f"It repeats, so it's back on the list, due {todo.get('due_date')}.")
+    if done and not asker:
+        # Hermes didn't say who sent this (an account not in BENNY_PEOPLE,
+        # a cron run, the CLI), so the app has Benny as the one who did it.
+        # Saying so beats a quiet "done by Benny" turning up later.
+        return _ok(
+            todo=todo,
+            tell_them="Say it's ticked off, but you couldn't tell who's asking, so it's down as done by you (Benny). "
+            "Michael can fix that by adding this chat account to BENNY_PEOPLE on the Pi.",
+        )
     return _ok(todo=todo)
 
 

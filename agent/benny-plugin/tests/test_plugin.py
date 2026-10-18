@@ -250,6 +250,28 @@ class PluginTest(unittest.TestCase):
             result = self.call(tools.set_todo_done, {"todo_id": CHORE_ID})
         self.assertEqual(FakeApp.requests[0]["body"], {"done": True, "asker": "mer"})
         self.assertEqual((result["todo"]["done_by"], result["todo"]["done_at"]), ("mer", "Sat Oct 17, 7:14 PM"))
+        self.assertNotIn("tell_them", result)
+
+    def test_done_without_a_known_asker_says_benny_got_the_credit(self):
+        FakeApp.routes[("PATCH", f"/api/todos/{CHORE_ID}")] = (200, {"todo": {
+            "id": CHORE_ID, "title": "Limes", "list": "groceries", "done": True,
+            "done_by": "benny", "done_at": "2026-10-18T20:01:29.226+00:00",
+        }})
+        with self.as_asker(None):
+            result = self.call(tools.set_todo_done, {"todo_id": CHORE_ID})
+        self.assertEqual(FakeApp.requests[0]["body"], {"done": True})
+        self.assertIn("couldn't tell who's asking", result["tell_them"])
+        self.assertIn("BENNY_PEOPLE", result["tell_them"])
+
+    def test_unticking_or_a_repeat_rolling_on_needs_no_who_note(self):
+        FakeApp.routes[("PATCH", f"/api/todos/{CHORE_ID}")] = (200, {"todo": {"id": CHORE_ID, "title": "Limes", "done": False}})
+        with self.as_asker(None):
+            self.assertNotIn("tell_them", self.call(tools.set_todo_done, {"todo_id": CHORE_ID, "done": False}))
+        FakeApp.routes[("PATCH", f"/api/todos/{CHORE_ID}")] = (200, {"todo": {"id": CHORE_ID, "title": "Plants", "due_date": "2026-10-27"}, "rolled": True})
+        with self.as_asker(None):
+            note = self.call(tools.set_todo_done, {"todo_id": CHORE_ID})["tell_them"]
+        self.assertIn("2026-10-27", note)
+        self.assertNotIn("couldn't tell", note)
 
     def test_local_time_falls_back_to_utc_without_time_zone_data(self):
         with mock.patch.object(tools, "ZoneInfo", side_effect=tools.ZoneInfoNotFoundError):
