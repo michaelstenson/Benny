@@ -3,7 +3,8 @@
 // list, every open to-do, the last month's finished ones and the open move
 // tasks with a date; My Day, Important, Planned and the Michael/Mer views
 // are worked out here from that. Today's calendar and weather for My Day
-// come from /api/digest.
+// come from /api/digest. The page fetches again every 30 seconds while
+// it's on screen, so what the other of us changes shows up on its own.
 //
 // Move tasks belong to the move tracker. Here they can be ticked off or
 // starred (the star is the tracker's "this week's focus"), through the
@@ -28,6 +29,9 @@ const SMART = {
 
 let data = null; // { today, lists, todos, move_tasks }
 let day = null; // { events, weather } from the digest, or null if it failed
+let saving = 0; // changes on their way to the server
+let changes = 0; // changes ever sent, so a refresh can tell one went out while it waited
+let shownHead = null; // the top of the list pane as last drawn
 const state = {
   view: storedView(),
   selected: null,
@@ -72,14 +76,23 @@ function flash(message, isError) {
 }
 
 async function api(method, url, body) {
-  const response = await fetch(url, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const json = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(json.error || 'Something went wrong.');
-  return json;
+  const change = method !== 'GET';
+  if (change) {
+    saving++;
+    changes++;
+  }
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(json.error || 'Something went wrong.');
+    return json;
+  } finally {
+    if (change) saving--;
+  }
 }
 
 function addDays(date, days) {
@@ -174,7 +187,7 @@ function render() {
   renderDetail();
 
   const fresh = $('add-input');
-  if (fresh) {
+  if (fresh && fresh !== input) {
     fresh.value = typed;
     if (typing) fresh.focus();
   }
@@ -370,15 +383,26 @@ function renderMain() {
     if (!items.length) body += `<div class="hl-todo-empty">Nothing on ${esc(list.name)} yet.</div>`;
   }
 
-  $('main').innerHTML = `
+  // Redrawing the add box closes the keyboard on a phone, so the top of the
+  // pane is only redrawn when something in it changed, never just because
+  // a refresh brought in someone else's to-do.
+  const head = `
     <button class="hl-todo-back" data-screen="nav">‹ Lists</button>
     <div class="hl-todo-head">${icon}<h1>${esc(meta.name)}</h1>
       ${list ? '<button class="hl-todo-icon-btn" data-settings aria-label="List settings" title="List settings">⋯</button>' : ''}</div>
     <div class="hl-todo-sub">${esc(subtitle(view, list))}</div>
     ${list ? settingsPanel(list) : ''}
     <form class="hl-todo-add" id="add"><span class="hl-todo-plus">＋</span><input id="add-input" placeholder="${placeholder}" autocomplete="off" maxlength="300" ${state.adding ? 'disabled' : ''} /></form>
-    <div class="hl-todo-hint">${esc(state.hint || addHint(view, list))}</div>
-    ${body}`;
+    <div class="hl-todo-hint">${esc(state.hint || addHint(view, list))}</div>`;
+  if (!$('main-body')) {
+    $('main').innerHTML = '<div id="main-head"></div><div id="main-body"></div>';
+    shownHead = null;
+  }
+  if (head !== shownHead) {
+    $('main-head').innerHTML = head;
+    shownHead = head;
+  }
+  $('main-body').innerHTML = body;
 }
 
 function addedLabel(item) {
@@ -597,10 +621,19 @@ document.addEventListener('submit', async (event) => {
 document.addEventListener('click', async (event) => {
   const el = event.target.closest(
     '[data-view],[data-check],[data-star],[data-myday],[data-open],[data-fold],[data-close],[data-delete],' +
-      '[data-step],[data-remove-step],[data-assign],[data-screen],[data-new-list],[data-settings],' +
+      // button[data-screen], not [data-screen]: #app carries data-screen
+      // too, and matching it turned every other click into a redraw that
+      // threw away the New list and list settings forms before they sent.
+      '[data-step],[data-remove-step],[data-assign],button[data-screen],[data-new-list],[data-settings],' +
       '[data-delete-list],[data-clear],[data-device]'
   );
   if (!el) return;
+  // On a phone a tapped button doesn't take the focus, and renderDetail
+  // won't redraw under a focused field, so a star or name tapped while
+  // editing the title saved but didn't show. Let go of the field (which
+  // saves it) first, as a click on a computer does.
+  const field = document.activeElement;
+  if (el.tagName === 'BUTTON' && $('detail').contains(field) && ['INPUT', 'TEXTAREA'].includes(field.tagName)) field.blur();
   const ds = el.dataset;
   const today = data.today;
 
@@ -744,6 +777,14 @@ document.addEventListener('keydown', (event) => {
 
 // --- Loading ----------------------------------------------------------------
 
+const REFRESH_MS = 30_000;
+
+function tag(todos) {
+  todos.todos.forEach((t) => (t.kind = 'todo'));
+  todos.move_tasks.forEach((t) => (t.kind = 'move'));
+  return todos;
+}
+
 async function load() {
   try {
     const [todos, digest] = await Promise.all([
@@ -751,9 +792,7 @@ async function load() {
       // My Day still works without the calendar and weather.
       api('GET', '/api/digest').catch(() => null),
     ]);
-    todos.todos.forEach((t) => (t.kind = 'todo'));
-    todos.move_tasks.forEach((t) => (t.kind = 'move'));
-    data = todos;
+    data = tag(todos);
     day = digest;
     render();
   } catch (err) {
@@ -761,10 +800,53 @@ async function load() {
   }
 }
 
-// The two of us (and Benny) change the same lists, so pick up anyone
-// else's changes whenever the page comes back into view.
+// Someone typing in a field (other than the add box, which a refresh
+// doesn't redraw), or a form open: a redraw would take it from under them.
+function busy() {
+  const el = document.activeElement;
+  const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el?.tagName) && el.id !== 'add-input';
+  return typing || state.newList || state.settingsOpen || state.adding;
+}
+
+// The two of us (and Benny) change the same lists, so this picks up the
+// other's changes without reloading the page. It holds off while one of
+// our own changes is on its way or someone is typing, throws its answer
+// away if a change went out while it waited (so it can't undo one), and
+// only redraws when something is different.
+let refreshing = false;
+async function refresh({ withDay = false } = {}) {
+  if (!data || refreshing || saving || busy()) return;
+  refreshing = true;
+  const sent = changes;
+  try {
+    const [todos, digest] = await Promise.all([
+      api('GET', '/api/todos'),
+      withDay ? api('GET', '/api/digest').catch(() => day) : day,
+    ]);
+    if (changes !== sent || saving || busy()) return;
+    tag(todos);
+    const same = digest === day && JSON.stringify(todos) === JSON.stringify(data);
+    data = todos;
+    day = digest;
+    if (!same) render();
+  } catch {
+    // Offline for a moment; the next one tries again.
+  } finally {
+    refreshing = false;
+  }
+}
+
+// Every 30 seconds while the page is on screen, and right away when it
+// comes back: another tab or app, the home-screen app reopened, or (for
+// the installed app on a computer) its window clicked back into. Coming
+// back also brings the calendar and weather up to date.
+setInterval(() => document.visibilityState === 'visible' && refresh(), REFRESH_MS);
+window.addEventListener('focus', () => refresh());
+window.addEventListener('pageshow', (event) => event.persisted && refresh({ withDay: true }));
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') load();
+  if (document.visibilityState !== 'visible') return;
+  if (data) refresh({ withDay: true });
+  else load(); // the first load failed; try again
 });
 
 $('app').dataset.screen = phone.matches ? 'nav' : 'list';

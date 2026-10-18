@@ -1714,6 +1714,14 @@ a list. Chores and Groceries are lists, and you can make more.
   Michael.
 - **On a phone** it's three screens like To Do's app: Lists → a list → a
   to-do.
+- **It keeps up on its own** (Oct 18). Every 30 seconds while the page is
+  on screen, and right away when you come back to it, To-Do fetches again
+  and redraws only if something changed, so what the other of us did shows
+  up without a reload (there's no refresh button in the home-screen app).
+  It holds off while one of your own changes is on its way or you're
+  typing, and drops an answer that one of your changes overtook, so it
+  can't undo a tap. It never redraws the add box, so a phone's keyboard
+  stays up. The calendar and weather only refetch when you come back.
 
 The homepage's Chores and Lists tiles became one To-Do tile. The Today
 card, the Timeline and the morning brief show due to-dos from every list.
