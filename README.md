@@ -1710,6 +1710,12 @@ a list. Chores and Groceries are lists, and you can make more.
   this, renames it, changes its emoji or deletes it (not Chores). Adding
   from a smart view lands in Chores, with that view's defaults: My Day,
   starred, due today, or for that person.
+- **An emoji at the front of a list's name becomes its icon** (Oct 18),
+  as in Microsoft To Do: "🛠️ Projects" is the 🛠️ list called Projects,
+  whether it's made with **+ New list** or renamed in ⋯. Text that only
+  looks like an emoji (©, ★, #) stays in the name, and so does a name
+  that's nothing but an emoji (`splitLeadingEmoji` in
+  `server/lib/todos.js`).
 - **Who it's for.** A named person wins. Otherwise it's the person whose
   view you're in, else the **Typing as** setting at the bottom of the
   sidebar. That's the same per-device choice the Move page's

@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildTodoUpdate } from '../server/lib/todos.js';
+import { buildListFields, buildTodoUpdate, splitLeadingEmoji } from '../server/lib/todos.js';
 import { actorOf, personOf } from '../server/lib/people.js';
 
 const TODAY = '2026-10-17';
@@ -82,4 +82,43 @@ test('actorOf: Benny gets the credit unless it says which of us asked', () => {
   assert.equal(actorOf(agent, undefined, EMAILS), 'benny');
   assert.equal(actorOf(agent, 'quincy', EMAILS), 'benny');
   assert.equal(actorOf(agent, { toString: () => 'mer' }, EMAILS), 'benny');
+});
+
+test('a leading emoji becomes the list icon, as in Microsoft To Do', () => {
+  assert.deepEqual(splitLeadingEmoji('🛠️Projects'), { emoji: '🛠️', name: 'Projects' });
+  assert.deepEqual(splitLeadingEmoji('🛒 Groceries'), { emoji: '🛒', name: 'Groceries' });
+  assert.deepEqual(splitLeadingEmoji('🇳🇱 Move'), { emoji: '🇳🇱', name: 'Move' });
+  assert.deepEqual(splitLeadingEmoji('👩‍💻 Work'), { emoji: '👩‍💻', name: 'Work' });
+  assert.deepEqual(splitLeadingEmoji('👍🏽 Done'), { emoji: '👍🏽', name: 'Done' });
+  assert.deepEqual(splitLeadingEmoji('1️⃣ First things'), { emoji: '1️⃣', name: 'First things' });
+  assert.deepEqual(splitLeadingEmoji('🛠 Bare'), { emoji: '🛠', name: 'Bare' }); // no U+FE0F
+  assert.deepEqual(splitLeadingEmoji('🎃🎃 Halloween'), { emoji: '🎃', name: '🎃 Halloween' });
+});
+
+test('text that only looks like an emoji, or no emoji first, stays in the name', () => {
+  for (const name of ['© Legal', '★ Stars', '#1 list', '1 thing', 'Groceries 🛒', 'Groceries', '🛒']) {
+    assert.deepEqual(splitLeadingEmoji(name), { emoji: null, name });
+  }
+});
+
+test('creating a list: the typed emoji wins over the default icon', () => {
+  assert.deepEqual(buildListFields({ name: '  🛠️  Projects ', emoji: '📋', mode: 'tasks' }, { creating: true }).fields, {
+    emoji: '🛠️', name: 'Projects', mode: 'tasks',
+  });
+  assert.deepEqual(buildListFields({ name: 'Hardware', emoji: '📋' }, { creating: true }).fields, { emoji: '📋', name: 'Hardware' });
+});
+
+test('renaming a list: an emoji in the name moves to the icon; the emoji field alone still works', () => {
+  assert.deepEqual(buildListFields({ name: '🧰 Tools', emoji: '🛠️' }, { creating: false }).fields, { emoji: '🧰', name: 'Tools' });
+  assert.deepEqual(buildListFields({ emoji: '🐧' }, { creating: false }).fields, { emoji: '🐧' });
+  assert.deepEqual(buildListFields({ emoji: null }, { creating: false }).fields, { emoji: null });
+});
+
+test('list fields still refuse empty or long names, odd emoji and unknown modes', () => {
+  assert.ok(buildListFields({ name: '   ' }, { creating: true }).error);
+  assert.ok(buildListFields({}, { creating: true }).error);
+  assert.ok(buildListFields({ name: 'x'.repeat(41) }, { creating: true }).error);
+  assert.ok(buildListFields({ name: `🛠️ ${'x'.repeat(40)}` }, { creating: true }).fields); // the icon doesn't count
+  assert.ok(buildListFields({ emoji: 'x'.repeat(17) }, { creating: false }).error);
+  assert.ok(buildListFields({ mode: 'notes' }, { creating: false }).error);
 });

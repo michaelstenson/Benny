@@ -18,7 +18,7 @@ import { supabaseAdmin } from '../lib/supabaseClient.js';
 import { householdToday } from '../lib/recurringBills.js';
 import { PEOPLE } from '../lib/moveTasks.js';
 import { parseTodoText } from '../lib/todoParser.js';
-import { MODES, buildTodoUpdate, cleanTitle } from '../lib/todos.js';
+import { buildListFields, buildTodoUpdate, cleanTitle } from '../lib/todos.js';
 import { actorOf, personOf } from '../lib/people.js';
 
 export const todosRouter = Router();
@@ -31,7 +31,6 @@ const TODO_COLUMNS =
 const LIST_COLUMNS = 'id, slug, name, emoji, mode, position';
 const DONE_SHOWN_DAYS = 30; // how long a finished to-do stays under "Completed"
 const MAX_ITEMS_PER_REQUEST = 50;
-const MAX_LIST_NAME_LENGTH = 40;
 const DEFAULT_LIST = 'chores'; // where adds from My Day and the other smart views land
 
 function fail(res, status, error) {
@@ -224,28 +223,11 @@ todosRouter.get('/lists', async (req, res) => {
   }
 });
 
-function listFields(body, { creating }) {
-  const fields = {};
-  if (creating || 'name' in body) {
-    const name = typeof body.name === 'string' ? body.name.trim().replace(/\s+/g, ' ') : '';
-    if (!name || name.length > MAX_LIST_NAME_LENGTH) return { error: `A list name is 1–${MAX_LIST_NAME_LENGTH} characters.` };
-    fields.name = name;
-  }
-  if ('emoji' in body) {
-    if (body.emoji !== null && (typeof body.emoji !== 'string' || body.emoji.length > 16)) return { error: '"emoji" is one emoji.' };
-    fields.emoji = body.emoji?.trim() || null;
-  }
-  if ('mode' in body) {
-    if (!MODES.includes(body.mode)) return { error: '"mode" must be tasks or items.' };
-    fields.mode = body.mode;
-  }
-  return { fields };
-}
-
-// POST /api/lists — body { name, emoji?, mode? }. App-only. The slug comes
-// from the name and never changes afterwards, so Benny can keep using it.
+// POST /api/lists — body { name, emoji?, mode? }. App-only. An emoji at the
+// front of the name becomes the icon. The slug comes from the name and
+// never changes afterwards, so Benny can keep using it.
 todosRouter.post('/lists', async (req, res) => {
-  const { fields, error: invalid } = listFields(req.body ?? {}, { creating: true });
+  const { fields, error: invalid } = buildListFields(req.body ?? {}, { creating: true });
   if (invalid) return fail(res, 400, invalid);
   try {
     const { data: existing, error: loadError } = await supabaseAdmin.from('lists').select('slug, position');
@@ -271,7 +253,7 @@ todosRouter.post('/lists', async (req, res) => {
 
 // PATCH /api/lists/:slug — body: any of { name, emoji, mode }. App-only.
 todosRouter.patch('/lists/:slug', async (req, res) => {
-  const { fields, error: invalid } = listFields(req.body ?? {}, { creating: false });
+  const { fields, error: invalid } = buildListFields(req.body ?? {}, { creating: false });
   if (invalid) return fail(res, 400, invalid);
   if (!Object.keys(fields).length) return fail(res, 400, 'Nothing to change.');
   try {
