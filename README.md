@@ -1805,9 +1805,8 @@ only Michael or Mer (`actorOf` in `server/lib/people.js`); with no
 known asker it's `benny`, and Benny says so in the chat ("I couldn't
 tell who's asking, so it's down as done by me"), with adding the account
 to `BENNY_PEOPLE` as the fix, rather than leaving a quiet "done by
-Benny" for later. The plugin with `asker` was copied to the Pi and
-Hermes restarted on Oct 18, 2026; the "couldn't tell" note needs the
-next re-copy.
+Benny" for later. The plugin with both was copied to the Pi and Hermes
+restarted on Oct 18, 2026.
 
 **Schema change** (`scripts/todo_merge.sql`, applied as the `todo_merge`
 migration). It's additive: `lists` gets `emoji`, `mode` (`tasks` or
