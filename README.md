@@ -1783,8 +1783,8 @@ model slips. When Benny ticks one off for one of us, the plugin sends
 `asker` (from the chat session, never the model) and the app records
 that person, not Benny. Only the agent's token can name someone, and
 only Michael or Mer (`actorOf` in `server/lib/people.js`); with no
-known asker it's `benny`. The plugin on the Pi needs re-copying for
-this (see "Benny plugin for Hermes").
+known asker it's `benny`. The plugin with this was copied to the Pi and
+Hermes restarted on Oct 18, 2026.
 
 **Schema change** (`scripts/todo_merge.sql`, applied as the `todo_merge`
 migration). It's additive: `lists` gets `emoji`, `mode` (`tasks` or
