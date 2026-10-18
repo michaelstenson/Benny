@@ -1577,6 +1577,25 @@ Re-copy the plugin and restart (`hermes gateway restart`) whenever it
 changes. Without the terminal, Benny can't run the skills that need it
 (maps, PDFs, GIF search) from chat. Images still work through `vision`.
 
+**Re-copying from Windows PowerShell** (from the repo folder, not
+`.git`). The `tar … | ssh` line under "Setup on the Pi" doesn't work
+there: Windows PowerShell passes a pipe between two programs as text,
+which breaks tar's binary format, and the Pi quietly keeps the old files
+(that's how the Oct 18 update first missed the Pi). Copy with `scp`
+instead. Windows files carry no Unix permissions, so `scp` makes the
+staging folder read-only, and the `chmod` gives it back so it can be
+removed. Keep each `ssh` command in single quotes with no double quotes
+inside, because Windows PowerShell strips those before `ssh` sees them.
+```
+git pull
+scp -r agent\benny-plugin pi:benny-plugin-new
+ssh pi 'chmod -R u+w ~/benny-plugin-new && cp -r ~/benny-plugin-new/. ~/.hermes/plugins/benny/ && rm -rf ~/benny-plugin-new && ~/.local/bin/hermes plugins doctor ~/.hermes/plugins/benny && ~/.local/bin/hermes gateway restart'
+ssh pi 'ls -l ~/.hermes/plugins/benny/tools.py'
+```
+The last line should show today's date. Any error stops the chain
+before the restart, so if one appears, Hermes is still running the old
+plugin.
+
 ## Parsers on Claude Haiku 5.5 (Oct 2026)
 
 The chore, bill and calendar parsers, the advice generator and the comps
